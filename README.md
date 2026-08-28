@@ -5,6 +5,8 @@ Mã nguồn, bộ chạy, cấu hình và dữ liệu của dự án này không
 
 ## Bản chạy và bộ cài
 
+Tải bộ cài chính thức tại [GitHub Releases](https://github.com/minhtuan5991/PNG-Mockup/releases/latest).
+
 - `PNG Mockup Setup.exe`: bộ cài offline để chuyển sang máy khác.
 - `App Source/PNG Mockup.exe`: mở bản chạy trong dự án.
 - `App Source/README.md`: hướng dẫn sử dụng đi kèm bộ cài.
@@ -27,7 +29,8 @@ Chỉ có một phong cách giao diện và năm bảng màu. Từ 1.1.0, bộ c
 `PNG Mockup` dưới ổ đĩa/thư mục cha đã chọn, ẩn file kỹ thuật và kèm công cụ
 hiện/ẩn cùng Uninstall giữ dữ liệu.
 
-Updater kiểm tra kênh GitHub riêng mỗi lần mở app và tải nền, không ngắt job.
+Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
+không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.
 Kênh chưa được cấu hình sẽ không kết nối mạng; không dùng kho của ứng dụng gốc.
 

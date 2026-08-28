@@ -92,8 +92,9 @@ hãy tự sao lưu rồi xóa phần còn lại sau khi kiểm tra.
 
 ## Cập nhật ngầm
 
-Khi bộ cài có kênh GitHub riêng đã cấu hình, mỗi lần khởi động app sẽ kiểm tra
-bản mới ở chế độ nền. Không có bản mới hoặc mất mạng sẽ không hiện hộp thoại.
+Bộ cài phát hành sử dụng kênh GitHub riêng `minhtuan5991/PNG-Mockup`. Mỗi lần
+khởi động app đã cài sẽ kiểm tra bản mới ở chế độ nền. Không có bản mới hoặc
+mất mạng sẽ không hiện hộp thoại.
 Chỉ khi phát hiện phiên bản mới hơn mới hiện thông báo nhỏ và bắt đầu tải ngầm;
 tác vụ PNG/Photoshop đang chạy được giữ nguyên.
 
@@ -108,8 +109,9 @@ thiết lập repository/chu kỳ cũ trong `config.json`. App không chứa tà
 token GitHub và không dùng kho cập nhật của ứng dụng gốc. Nếu kênh chưa cấu hình,
 **Cài đặt** sẽ hiển thị trạng thái đó; vẫn dùng bộ cài riêng để cập nhật thủ công.
 
-**Lưu ý chuyển từ 1.0.0:** bản cũ chưa có updater nên cần chạy bộ cài 1.1.0 một
-lần. Từ bản có kênh riêng đã bật, các lần phát hành tiếp theo được phát hiện tự động.
+**Lưu ý chuyển bản:** bản 1.0.0 và bản 1.1.0 nội bộ chưa bật kênh GitHub cần
+chạy bộ cài phát hành này một lần. Sau đó, các phiên bản mới hơn được phát hiện
+tự động. Tải bộ cài từ [GitHub Releases](https://github.com/minhtuan5991/PNG-Mockup/releases/latest).
 
 Bản chạy trực tiếp trong checkout `App Source` không tự cập nhật đè mã nguồn.
 Hãy dùng bản đã cài ở thư mục riêng để nhận các cập nhật tự động.

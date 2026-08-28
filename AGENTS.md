@@ -9,8 +9,9 @@ project; never edit, synchronize into, or build the original AutoMockup project.
   execution behavior compatible with the original unless explicitly approved.
 - There is no Idea, browser login, prompt, PrintArea or background removal flow.
 - Settings, queue, logs, runtime and temporary files belong only to this app.
-- Online updates are disabled until a dedicated product-validated update channel
-  is implemented. Never reuse the original application's update repository.
+- Online updates use the product-validated channel `minhtuan5991/PNG-Mockup`.
+  Never reuse the original application's update repository. Source checkouts
+  must never update themselves over the developer's working tree.
 - Preserve user `config.json`, `PNG`, `Mockup`, `Output` and `logs` when installing.
 - New installation chooses a parent and creates its `PNG Mockup` child; updates
   target the existing installation exactly. Never replace files while it runs.
