@@ -53,6 +53,17 @@ Sau khi phát hành, kiểm tra latest release không đăng nhập, tải lại
 đối chiếu hash và thử backend updater từ bản thấp hơn trong thư mục kiểm thử.
 Không thử nâng cấp bằng cách đổi phiên bản/cấu hình ở thư mục đang làm việc.
 
+Có thể kiểm chứng bằng công cụ riêng sau khi release đã công khai:
+
+```powershell
+& '.\App Source\tools\python.bat' 'tools\verify_live_update.py' --repository minhtuan5991/PNG-Mockup --installer '.\PNG Mockup Setup.exe' --timeout 300
+```
+
+Công cụ trích bộ cài vào thư mục mới trong `build`, kiểm tra phiên bản hiện tại
+không báo cập nhật, rồi giả lập riêng metadata phiên bản `0.0.1` trong bản trích
+đó để tải thật từ GitHub. Báo cáo ở `build/live-update-check-*/live-update-result.json`.
+Không dùng token, không mở app/Photoshop và không cài đè bản đang sử dụng.
+
 ## Tài liệu API
 
 Triển khai dựa trên GitHub REST API chính thức:
