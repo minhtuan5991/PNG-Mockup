@@ -1,0 +1,18 @@
+{
+  "ui_theme": "png_modern",
+  "ui_color_preset": "soft_purple",
+  "generation_timeout_sec": 600,
+  "output_width_px": 2000,
+  "output_height_px": 2000,
+  "output_dpi": 72,
+  "remove_output_metadata": true,
+  "output_watermark_enabled": false,
+  "output_watermark_path": "",
+  "cleanup_on_exit": false,
+  "completion_notification_enabled": true,
+  "completion_sound_enabled": false,
+  "update_github_repo": "",
+  "update_check_on_start": false,
+  "update_check_interval_hours": 24,
+  "rerun_done": false
+}

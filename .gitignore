@@ -1,0 +1,35 @@
+# Personal configuration, design files, output and operational history.
+/App Source/config.json
+/App Source/PNG/
+/App Source/Mockup/
+/App Source/Output/
+/App Source/logs/
+
+# Runtime and generated programs are distributed through release assets only.
+/App Source/runtime/
+/App Source/*.exe
+/App Source/*.pdb
+/PNG Mockup Setup.exe
+/PNG Mockup Setup.exe.sha256
+/build/
+/verification/
+
+# Local tools, caches and credentials must never enter the source repository.
+/.codex/
+/.agents/
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.log
+*.tmp
+*.part
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.DS_Store
+Thumbs.db
+Desktop.ini

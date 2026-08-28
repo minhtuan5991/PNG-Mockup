@@ -1,0 +1,10 @@
+{
+  "id": "png_modern",
+  "name": "PNG Modern",
+  "version": "1.0.0",
+  "description": "Single native desktop style. Semantic palettes live in src/ui_themes.py.",
+  "palettes": ["mint", "soft_purple", "light", "dark", "brown"],
+  "default_palette": "soft_purple",
+  "typography": "Segoe UI",
+  "icons": "code-native outline icons"
+}
