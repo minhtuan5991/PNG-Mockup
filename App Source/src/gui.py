@@ -35,6 +35,7 @@ from update_manager import read_current_version
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_BAT = ROOT / "tools" / "python.bat"
 APP_ICON = ROOT / "assets" / "app_icon.ico"
+APP_LOGO = ROOT / "assets" / "logo.png"
 APP_DISPLAY_NAME = "PNG Mockup"
 RENAME_THUMBNAIL_CACHE_LIMIT = 512
 
@@ -87,6 +88,7 @@ class PngMockupGui:
         self.buttons: dict[str, StudioButton] = {}
         self.locked_buttons: set[str] = set()
         self.button_icon_refs: dict[str, ImageTk.PhotoImage] = {}
+        self.brand_logo_ref: ImageTk.PhotoImage | None = None
         self._icon_specs: dict[str, tuple[ttk.Widget, str, str, int]] = {}
         self._rename_thumbnail_cache: dict[tuple[str, int, int, str, str], ImageTk.PhotoImage] = {}
         self.pages: dict[str, ttk.Frame] = {}
@@ -169,8 +171,27 @@ class PngMockupGui:
               lightcolor=[("disabled", t.border), ("focus", t.accent_hover)], darkcolor=[("disabled", t.border), ("focus", t.accent_hover)])
         s.configure("Quiet.TButton", padding=(8, 7), background=t.surface, bordercolor=t.surface,
                     lightcolor=t.surface, darkcolor=t.surface, foreground=t.muted)
+        s.configure("Bold.TButton", background=t.surface_alt, foreground=t.text, padding=(12, 9),
+                    borderwidth=1, relief="flat", bordercolor=t.border, lightcolor=t.border,
+                    darkcolor=t.border, focuscolor=t.accent, focusthickness=2,
+                    font=("Segoe UI", 10, "bold"))
+        s.configure("BoldQuiet.TButton", padding=(8, 7), background=t.surface,
+                    bordercolor=t.surface, lightcolor=t.surface, darkcolor=t.surface,
+                    foreground=t.muted, font=("Segoe UI", 10, "bold"))
         s.configure("Danger.TButton", foreground=t.danger)
         s.map("Danger.TButton", foreground=[("disabled", t.muted), ("active", t.danger)])
+        s.configure("BoldDanger.TButton", foreground=t.danger, font=("Segoe UI", 10, "bold"))
+        s.map("BoldDanger.TButton", foreground=[("disabled", t.muted), ("active", t.danger)])
+        s.configure("SoftGreenOutline.TButton", padding=(8, 7), background=t.surface,
+                    foreground=t.muted, borderwidth=1, relief="flat",
+                    bordercolor=t.soft_green_border, lightcolor=t.soft_green_border,
+                    darkcolor=t.soft_green_border, focuscolor=t.accent, focusthickness=2)
+        s.map("SoftGreenOutline.TButton",
+              background=[("disabled", t.surface), ("pressed", t.selected), ("active", t.selected)],
+              foreground=[("disabled", t.muted), ("active", t.text)],
+              bordercolor=[("disabled", t.border), ("focus", t.accent)],
+              lightcolor=[("disabled", t.border), ("focus", t.accent)],
+              darkcolor=[("disabled", t.border), ("focus", t.accent)])
         s.configure("Nav.TButton", background=t.sidebar, foreground=t.muted, anchor="w", padding=(14, 13),
                     bordercolor=t.sidebar, lightcolor=t.sidebar, darkcolor=t.sidebar, font=("Segoe UI", 11))
         s.configure("Selected.Nav.TButton", background=t.selected, foreground=t.accent,
@@ -256,7 +277,18 @@ class PngMockupGui:
         brand = ttk.Frame(sidebar, style="Sidebar.TFrame")
         brand.grid(row=0, column=0, sticky="ew", pady=(0, 28))
         mark = ttk.Label(brand, style="BrandIcon.TLabel")
-        self._icon(mark, "brand", size=36)
+        if APP_LOGO.is_file():
+            try:
+                with Image.open(APP_LOGO) as source:
+                    self.brand_logo_ref = ImageTk.PhotoImage(
+                        source.convert("RGB").resize((40, 40), Image.Resampling.LANCZOS),
+                        master=self.root,
+                    )
+                mark.configure(image=self.brand_logo_ref)
+            except (OSError, tk.TclError):
+                self._icon(mark, "brand", size=36)
+        else:
+            self._icon(mark, "brand", size=36)
         mark.pack(side="left", padx=(0, 10))
         ttk.Label(brand, text="PNG\nMockup", style="Brand.TLabel").pack(side="left")
         nav = ttk.Frame(sidebar, style="Sidebar.TFrame")
@@ -322,8 +354,8 @@ class PngMockupGui:
         actions = ttk.Frame(body, style="Section.TFrame")
         actions.pack(fill="x")
         folder = lambda: load_config().png_dir if key == "png" else load_config().mockup_dir
-        self._button(actions, "Mở PNG" if key == "png" else "Mở Mockup", lambda: self.open_path(folder()), key, icon="folder", lock=False).pack(side="left")
-        self._button(actions, "Đổi tên", lambda: self.open_file_renamer(folder(), "PNG" if key == "png" else "Mockup", PNG_IMAGE_EXTS if key == "png" else MOCKUP_FILE_EXTS, "png" if key == "png" else "mockup"), "rename_" + key, icon="rename").pack(side="left", padx=(8, 0))
+        self._button(actions, "Mở PNG" if key == "png" else "Mở Mockup", lambda: self.open_path(folder()), key, icon="folder", lock=False, style="Bold.TButton").pack(side="left")
+        self._button(actions, "Đổi Tên", lambda: self.open_file_renamer(folder(), "PNG" if key == "png" else "Mockup", PNG_IMAGE_EXTS if key == "png" else MOCKUP_FILE_EXTS, "png" if key == "png" else "mockup"), "rename_" + key, icon="rename", style="Bold.TButton").pack(side="left", padx=(8, 0))
 
     def _build_mockup_page(self, parent: ttk.Frame) -> None:
         # The log grows on large screens; a single page scroll preserves every
@@ -362,14 +394,14 @@ class PngMockupGui:
         self._button(actions, "Bắt đầu / Tiếp tục", lambda: self.start_automation(False), "run", primary=True, icon="run").pack(side="left")
         self._button(actions, "Chạy thử 1 job", lambda: self.start_automation(True), "one_job", icon="one_job").pack(side="left", padx=(8, 0))
         self._button(actions, "Dừng sau job", self.request_stop, "stop", icon="stop", lock=False).pack(side="left", padx=(8, 0))
-        self._button(actions, "Buộc dừng", self.force_stop, "force_stop", lock=False, style="Danger.TButton").pack(side="right", padx=(8, 0))
+        self._button(actions, "Buộc dừng", self.force_stop, "force_stop", lock=False, style="BoldDanger.TButton").pack(side="right", padx=(8, 0))
         ttk.Separator(body).pack(fill="x", pady=(14, 8))
         watermark = ttk.Frame(body, style="Section.TFrame")
         watermark.pack(fill="x")
         check = ttk.Checkbutton(watermark, text="Watermark tự động", variable=self.output_watermark_enabled_var, command=self.on_output_watermark_toggle)
         check.pack(side="left", padx=(0, 12))
         self.output_watermark_option_widgets.append(check)
-        self.output_watermark_choose_button = ttk.Button(watermark, text="Chọn PNG", command=self.choose_output_watermark, style="Quiet.TButton")
+        self.output_watermark_choose_button = ttk.Button(watermark, text="Chọn PNG", command=self.choose_output_watermark, style="SoftGreenOutline.TButton")
         self.output_watermark_choose_button.pack(side="right")
         self.output_watermark_option_widgets.append(self.output_watermark_choose_button)
         path = ttk.Label(watermark, textvariable=self.output_watermark_path_display_var, style="SectionMuted.TLabel", anchor="w", width=10)
@@ -386,7 +418,7 @@ class PngMockupGui:
         bar.pack(fill="x", pady=(0, 10))
         ttk.Label(bar, text="Nhật ký chạy", style="LogTitle.TLabel").pack(side="left")
         for text, command, key in (("Làm mới", self.refresh_all, "refresh_top"), ("Đặt lỗi về chờ", self.run_reset_failed, "reset_top"), ("Chạy lại lỗi", self.run_error_jobs, "run_error_top")):
-            self._button(bar, text, command, key, lock=key != "refresh_top", style="Quiet.TButton").pack(side="right", padx=(6, 0))
+            self._button(bar, text, command, key, lock=key != "refresh_top", style="SoftGreenOutline.TButton").pack(side="right", padx=(6, 0))
         text_frame = ttk.Frame(body, style="Section.TFrame")
         text_frame.pack(fill="both", expand=True)
         scrollbar = ttk.Scrollbar(text_frame, orient="vertical")
@@ -401,7 +433,7 @@ class PngMockupGui:
         footer = ttk.Frame(body, style="Section.TFrame")
         footer.pack(fill="x", pady=(8, 0))
         ttk.Label(footer, text="Tự tiếp tục các job chưa xong · Ctrl + Enter để chạy", style="SectionMuted.TLabel", font=("Segoe UI", 9)).pack(side="left")
-        self._button(footer, "Mở Output", lambda: self.open_path(load_config().output_dir), "output", icon="folder", lock=False, style="Quiet.TButton").pack(side="right")
+        self._button(footer, "Mở Output", lambda: self.open_path(load_config().output_dir), "output", icon="folder", lock=False, style="BoldQuiet.TButton").pack(side="right")
 
     def _build_tools_page(self, parent: ttk.Frame) -> None:
         scroll = ScrollPanel(parent, background=self.theme.bg)

@@ -12,7 +12,7 @@ DEFAULT_COLOR_PRESET = "soft_purple"
 COLOR_FIELDS = (
     "bg", "surface", "surface_alt", "sidebar", "header", "text", "muted",
     "accent", "accent_hover", "accent_text", "border", "selected", "success",
-    "warning", "danger", "log_bg", "log_fg", "thumb_bg",
+    "warning", "danger", "soft_green_border", "log_bg", "log_fg", "thumb_bg",
 )
 
 @dataclass(frozen=True)
@@ -35,6 +35,7 @@ class UITheme:
     success: str
     warning: str
     danger: str
+    soft_green_border: str
     log_bg: str
     log_fg: str
     thumb_bg: str
@@ -53,6 +54,7 @@ COLOR_PRESETS: dict[str, dict[str, Any]] = {
             "muted": "#536D65", "accent": "#076E63", "accent_hover": "#05594E",
             "accent_text": "#FFFFFF", "border": "#CFDFD7", "selected": "#D5EBE2",
             "success": "#187046", "warning": "#90600B", "danger": "#B23F4C",
+            "soft_green_border": "#9BCFBD",
             "log_bg": "#FBFDFC", "log_fg": "#29443B", "thumb_bg": "#EDF5F1",
         },
     },
@@ -65,6 +67,7 @@ COLOR_PRESETS: dict[str, dict[str, Any]] = {
             "muted": "#6A627B", "accent": "#6548B9", "accent_hover": "#51349D",
             "accent_text": "#FFFFFF", "border": "#DDD7EA", "selected": "#E2D9F6",
             "success": "#23734E", "warning": "#946113", "danger": "#B53D57",
+            "soft_green_border": "#9BCFBD",
             "log_bg": "#FCFBFE", "log_fg": "#3C354E", "thumb_bg": "#F1EEF8",
         },
     },
@@ -77,6 +80,7 @@ COLOR_PRESETS: dict[str, dict[str, Any]] = {
             "muted": "#596A7D", "accent": "#405570", "accent_hover": "#2D415B",
             "accent_text": "#FFFFFF", "border": "#D7E0E8", "selected": "#DBE5EF",
             "success": "#23734E", "warning": "#946113", "danger": "#B43D4A",
+            "soft_green_border": "#9BCFBD",
             "log_bg": "#FCFDFE", "log_fg": "#304254", "thumb_bg": "#EDF1F5",
         },
     },
@@ -89,6 +93,7 @@ COLOR_PRESETS: dict[str, dict[str, Any]] = {
             "muted": "#BDB4D0", "accent": "#BCA4FA", "accent_hover": "#CDBAFC",
             "accent_text": "#241837", "border": "#474054", "selected": "#3E3356",
             "success": "#83D5AD", "warning": "#EBBD77", "danger": "#F197AD",
+            "soft_green_border": "#78BDA5",
             "log_bg": "#201D29", "log_fg": "#DAD3E9", "thumb_bg": "#302B3E",
         },
     },
@@ -101,6 +106,7 @@ COLOR_PRESETS: dict[str, dict[str, Any]] = {
             "muted": "#75624F", "accent": "#775230", "accent_hover": "#654526",
             "accent_text": "#FFFFFF", "border": "#DFD2C0", "selected": "#E8D8C1",
             "success": "#4A7040", "warning": "#966014", "danger": "#AF453D",
+            "soft_green_border": "#9BCFBD",
             "log_bg": "#FEFCF8", "log_fg": "#534231", "thumb_bg": "#F2EBE0",
         },
     },

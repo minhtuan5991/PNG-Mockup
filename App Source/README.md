@@ -1,4 +1,8 @@
-# PNG Mockup 1.1.0
+# PNG Mockup 1.1.1
+
+Biểu tượng ứng dụng dùng logo áo chữ E và mạch điện. Các thao tác mở thư mục,
+đổi tên, buộc dừng và mở Output được nhấn bằng chữ đậm; nút bảo trì hàng đợi và
+chọn watermark có viền xanh nhạt trong cả năm bảng màu.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 

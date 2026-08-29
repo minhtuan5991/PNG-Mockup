@@ -22,7 +22,9 @@ truth for actual colors is `App Source/src/ui_themes.py`.
 - Small code-drawn icons, no emoji or external web font dependencies.
 - Clear keyboard focus; buttons and text do not shift on hover.
 - Semantic colors: background, surface, text, muted, accent, selected, border,
-  success, warning, danger and log colors.
+  success, warning, danger, soft-green utility border and log colors.
+- Folder/output actions use bold labels. Queue maintenance and watermark selection
+  use a light-green outline while keeping keyboard focus in the active palette.
 - Five presets: Mint, Tím nhẹ, Sáng, Tối, Nâu. Default: Tím nhẹ.
 - Main text and button labels must pass 4.5:1 contrast; test every palette.
 

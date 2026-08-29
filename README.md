@@ -1,5 +1,9 @@
 # PNG Mockup
 
+<p align="center">
+  <img src="App%20Source/assets/logo.png" width="144" height="144" alt="PNG Mockup logo">
+</p>
+
 Ứng dụng Windows độc lập để ghép thiết kế PNG vào mockup PSD/PSB bằng Photoshop.
 Mã nguồn, bộ chạy, cấu hình và dữ liệu của dự án này không dùng chung với app gốc.
 
@@ -28,6 +32,10 @@ Bộ cài không cho cài đè vào thư mục mã nguồn hoặc `App Source`.
 Chỉ có một phong cách giao diện và năm bảng màu. Từ 1.1.0, bộ cài tạo thư mục
 `PNG Mockup` dưới ổ đĩa/thư mục cha đã chọn, ẩn file kỹ thuật và kèm công cụ
 hiện/ẩn cùng Uninstall giữ dữ liệu.
+
+Từ 1.1.1, logo áo chữ E được dùng đồng nhất cho cửa sổ, file chạy, bộ cài và
+tài sản favicon; các thao tác thư mục chính có chữ đậm và nhóm bảo trì có viền
+xanh nhạt theo giao diện mới.
 
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.

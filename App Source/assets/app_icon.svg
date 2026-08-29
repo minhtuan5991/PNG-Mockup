@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <title>PNG Mockup</title>
-  <rect x="8" y="8" width="240" height="240" rx="56" fill="#7045D5"/>
-  <rect x="39" y="40" width="152" height="130" rx="19" fill="#D8CCFA"/>
-  <rect x="61" y="72" width="157" height="143" rx="19" fill="#FFFFFF"/>
-  <circle cx="172" cy="111" r="14" fill="#7045D5"/>
-  <path d="M78 187L119 133L146 165L162 148L201 187Z" fill="#7045D5"/>
-</svg>

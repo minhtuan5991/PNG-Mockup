@@ -100,6 +100,17 @@ def main() -> int:
             str(app.buttons["batch_resize"].cget("text"))
             == "Chọn ảnh PNG"
         )
+        assert str(app.buttons["png"].cget("style")) == "Bold.TButton"
+        assert str(app.buttons["mockup"].cget("style")) == "Bold.TButton"
+        assert str(app.buttons["rename_png"].cget("text")) == "Đổi Tên"
+        assert str(app.buttons["rename_mockup"].cget("text")) == "Đổi Tên"
+        assert str(app.buttons["rename_png"].cget("style")) == "Bold.TButton"
+        assert str(app.buttons["rename_mockup"].cget("style")) == "Bold.TButton"
+        assert str(app.buttons["force_stop"].cget("style")) == "BoldDanger.TButton"
+        assert str(app.buttons["output"].cget("style")) == "BoldQuiet.TButton"
+        assert str(app.output_watermark_choose_button.cget("style")) == "SoftGreenOutline.TButton"
+        for key in ("refresh_top", "reset_top", "run_error_top"):
+            assert str(app.buttons[key].cget("style")) == "SoftGreenOutline.TButton"
 
         from png_optimizer import PngImageInfo, inspect_png
 
@@ -342,6 +353,10 @@ def main() -> int:
             assert str(window.cget("background")) == app.theme.bg
             assert str(app.output.cget("foreground")) == app.theme.log_fg
             assert ttk.Style(window).lookup("Primary.TButton", "background") == app.theme.accent
+            assert ttk.Style(window).lookup("SoftGreenOutline.TButton", "bordercolor") == app.theme.soft_green_border
+            assert "bold" in str(ttk.Style(window).lookup("Bold.TButton", "font")).casefold()
+            assert "bold" in str(ttk.Style(window).lookup("BoldDanger.TButton", "font")).casefold()
+            assert "bold" in str(ttk.Style(window).lookup("BoldQuiet.TButton", "font")).casefold()
             icon_colors.add(ImageTk.getimage(app.button_icon_refs[str(app.buttons["run"])]).tobytes())
             for page in ("mockup", "tools", "settings"):
                 app.show_page(page)

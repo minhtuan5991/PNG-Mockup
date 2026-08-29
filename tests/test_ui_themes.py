@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import sys
 import unittest
+import hashlib
 from pathlib import Path
+
+from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "App Source" / "src"))
@@ -21,6 +24,22 @@ def contrast(first: str, second: str) -> float:
 
 
 class UIThemeTests(unittest.TestCase):
+    def test_brand_assets_share_the_approved_master_and_expected_icon_sizes(self) -> None:
+        assets = PROJECT_ROOT / "App Source" / "assets"
+        logo = assets / "logo.png"
+        app_png = assets / "app_icon.png"
+        self.assertTrue(logo.is_file())
+        self.assertEqual(hashlib.sha256(logo.read_bytes()).digest(), hashlib.sha256(app_png.read_bytes()).digest())
+        self.assertFalse((assets / "app_icon.svg").exists(), "The retired purple SVG must not remain as a conflicting logo")
+        with Image.open(logo) as image:
+            self.assertEqual(image.size, (512, 512))
+        with Image.open(assets / "favicon.png") as image:
+            self.assertEqual(image.size, (64, 64))
+        with Image.open(assets / "app_icon.ico") as image:
+            self.assertTrue({(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)}.issubset(image.ico.sizes()))
+        with Image.open(assets / "favicon.ico") as image:
+            self.assertTrue({(16, 16), (32, 32), (48, 48), (64, 64)}.issubset(image.ico.sizes()))
+
     def test_only_the_approved_style_and_five_palettes_are_exposed(self) -> None:
         self.assertEqual(ui_themes.reload_themes(), ())
         self.assertEqual(tuple(ui_themes.UI_THEMES), ("png_modern",))
@@ -39,6 +58,7 @@ class UIThemeTests(unittest.TestCase):
                 self.assertIsNot(themed, source)
                 for token in ui_themes.COLOR_FIELDS:
                     self.assertRegex(getattr(themed, token), r"^#[0-9A-Fa-f]{6}$")
+                self.assertGreaterEqual(contrast(themed.soft_green_border, themed.surface), 1.35)
                 identities.add((themed.bg, themed.sidebar, themed.accent))
         self.assertEqual(len(identities), 5)
         self.assertEqual(source.color_preset, "soft_purple")

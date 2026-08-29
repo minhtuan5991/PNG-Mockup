@@ -156,6 +156,9 @@ class InstallerPayloadTests(unittest.TestCase):
         self.assertTrue(report["offline_runtime_included"])
         self.assertEqual(report["files"], len(self.manifest["files"]) + 1)
         with zipfile.ZipFile(io.BytesIO(self.zip_bytes)) as archive:
+            names = archive.namelist()
+            for asset in ("assets/logo.png", "assets/app_icon.png", "assets/app_icon.ico", "assets/favicon.png", "assets/favicon.ico"):
+                self.assertIn(asset, names)
             for row in self.manifest["files"]:
                 content = archive.read(row["path"])
                 self.assertEqual(len(content), row["length"], row["path"])
@@ -164,7 +167,6 @@ class InstallerPayloadTests(unittest.TestCase):
                 self.assertTrue(source_file.is_file(), "Payload file has no App Source counterpart: " + row["path"])
                 self.assertEqual(hashlib.sha256(source_file.read_bytes()).hexdigest(), row["sha256"],
                                  "The setup is stale relative to App Source: " + row["path"])
-            names = archive.namelist()
             self.assertFalse(any(name.split("/")[0] in {"PNG", "Mockup", "Output", "logs", "Theme", "tests"} for name in names))
             self.assertFalse(any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names))
             identity = json.loads(archive.read("version.json"))
