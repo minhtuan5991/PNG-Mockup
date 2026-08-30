@@ -58,7 +58,7 @@ $manifest = @'
 '@
 [IO.File]::WriteAllText($manifestPath, $manifest, $utf8)
 
-function Compile-Program([string]$Source, [string]$Destination, [string]$Title) {
+function Compile-Program([string]$Source, [string]$Destination, [string]$Title, [string]$Icon = 'assets\app_icon.ico') {
     [void](Assert-ProjectPath $Source)
     [void](Assert-ProjectPath $Destination)
     $infoPath = Join-Path $stage (([IO.Path]::GetFileNameWithoutExtension($Destination)) + '.AssemblyInfo.cs')
@@ -75,8 +75,10 @@ using System.Reflection;
 [assembly: AssemblyMetadata("ProductId", "png-mockup")]
 "@
     [IO.File]::WriteAllText($infoPath, $assemblyInfo, $utf8)
+    $iconPath = Assert-ProjectPath (Join-Path $appRoot $Icon)
+    if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) { throw "Program icon is missing: $iconPath" }
     $compilerArgs = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/codepage:65001',
-        "/out:$Destination", "/win32icon:$(Join-Path $appRoot 'assets\app_icon.ico')", "/win32manifest:$manifestPath",
+        "/out:$Destination", "/win32icon:$iconPath", "/win32manifest:$manifestPath",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
         '/reference:System.Windows.Forms.dll', '/reference:System.Web.Extensions.dll',
         '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
@@ -89,11 +91,11 @@ $launcher = Join-Path $stage 'PNG Mockup.exe'
 Compile-Program (Join-Path $appRoot 'tools\portable_launcher.cs') $launcher 'PNG Mockup'
 Copy-Item -LiteralPath $launcher -Destination (Join-Path $appRoot 'PNG Mockup.exe') -Force
 foreach ($helper in @(
-    @{ Source = 'uninstall.cs'; Name = 'Uninstall.exe'; Title = 'Uninstall PNG Mockup' },
-    @{ Source = 'technical_visibility.cs'; Name = 'Show technical files.exe'; Title = 'PNG Mockup technical files' }
+    @{ Source = 'uninstall.cs'; Name = 'Uninstall.exe'; Title = 'Uninstall PNG Mockup'; Icon = 'assets\uninstall_icon.ico' },
+    @{ Source = 'technical_visibility.cs'; Name = 'Show technical files.exe'; Title = 'PNG Mockup technical files'; Icon = 'assets\technical_files_icon.ico' }
 )) {
     $helperPath = Join-Path $stage $helper.Name
-    Compile-Program (Join-Path $appRoot ('tools\' + $helper.Source)) $helperPath $helper.Title
+    Compile-Program (Join-Path $appRoot ('tools\' + $helper.Source)) $helperPath $helper.Title $helper.Icon
     Copy-Item -LiteralPath $helperPath -Destination (Join-Path $appRoot $helper.Name) -Force
 }
 & $python -I -B -X utf8 (Join-Path $appRoot 'tools\runtime_check.py')

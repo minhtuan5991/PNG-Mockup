@@ -578,6 +578,7 @@ def verify_installer(
                 "png mockup.exe", "uninstall.exe", "show technical files.exe",
                 "config.json", "version.json", CHANNEL_FILE,
                 "src/gui.py", "src/app.py", "src/update_manager.py", "assets/app_icon.ico",
+                "assets/uninstall_icon.ico", "assets/technical_files_icon.ico",
                 "runtime/python/python.exe", "runtime/python/pythonw.exe",
                 "runtime/python/python312.dll", "runtime/python/python312._pth",
                 "runtime/python/lib/tkinter/__init__.py",

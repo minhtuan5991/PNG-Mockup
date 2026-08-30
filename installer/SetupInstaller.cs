@@ -328,6 +328,7 @@ internal static class InstallEngine
             ProductSupport.ValidateIdentity(parent, true);
             return ValidateTarget(parent);
         }
+        if (IsPreservedWorkFolderLayout(parent)) return ValidateTarget(parent);
         return ValidateTarget(Path.Combine(parent, "PNG Mockup"));
     }
 
@@ -622,7 +623,7 @@ internal static class InstallEngine
                 new string[] { "automockup", "autodesignpod", "geminimockup" }.Any(name => repository.ToLowerInvariant().Contains(name)))
                 throw new InvalidDataException("The update repository is not a valid dedicated PNG Mockup channel.");
             payload.Channel = channel;
-            foreach (string required in new string[] { "PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe", "update-channel.json", "config.json", "src/gui.py", "assets/app_icon.ico", "tools/runtime_check.py", "runtime/python/python.exe", "runtime/python/pythonw.exe", "runtime/python/python312.dll", "runtime/python/python312._pth", "runtime/python/Lib/tkinter/__init__.py", "runtime/python/Lib/site-packages/PIL/__init__.py", "runtime/python/tcl/tcl8.6/init.tcl", "runtime/python/tcl/tk8.6/tk.tcl", "tools/oxipng/oxipng.exe", "runtime/python/LICENSE.txt", "tools/oxipng/LICENSE", "THIRD_PARTY_NOTICES.md" })
+            foreach (string required in new string[] { "PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe", "update-channel.json", "config.json", "src/gui.py", "assets/app_icon.ico", "assets/uninstall_icon.ico", "assets/technical_files_icon.ico", "tools/runtime_check.py", "runtime/python/python.exe", "runtime/python/pythonw.exe", "runtime/python/python312.dll", "runtime/python/python312._pth", "runtime/python/Lib/tkinter/__init__.py", "runtime/python/Lib/site-packages/PIL/__init__.py", "runtime/python/tcl/tcl8.6/init.tcl", "runtime/python/tcl/tk8.6/tk.tcl", "tools/oxipng/oxipng.exe", "runtime/python/LICENSE.txt", "tools/oxipng/LICENSE", "THIRD_PARTY_NOTICES.md" })
                 if (!declared.Contains(required)) throw new InvalidDataException("Required offline component is missing: " + required);
             ZipArchiveEntry manifestEntry = payload.Entries["setup_manifest.json"];
             using (Stream data = manifestEntry.Open())
@@ -692,10 +693,23 @@ internal static class InstallEngine
                 ProductSupport.ValidateIdentity(target, true);
                 identified = true;
             }
-            if (!identified && Directory.EnumerateFileSystemEntries(target).Any())
+            if (!identified && Directory.EnumerateFileSystemEntries(target).Any() && !IsPreservedWorkFolderLayout(target))
                 throw new InvalidDataException("The selected folder is not empty and is not an identified PNG Mockup installation.");
         }
         return target;
+    }
+
+    private static bool IsPreservedWorkFolderLayout(string target)
+    {
+        if (!Directory.Exists(target) || !Path.GetFileName(target.TrimEnd('\\')).Equals("PNG Mockup", StringComparison.OrdinalIgnoreCase)) return false;
+        var allowed = new HashSet<string>(new string[] { "PNG", "Mockup", "Output" }, StringComparer.OrdinalIgnoreCase);
+        foreach (string entry in Directory.EnumerateFileSystemEntries(target))
+        {
+            string name = Path.GetFileName(entry);
+            if (!allowed.Contains(name) || !Directory.Exists(entry)) return false;
+            AssertNoReparse(entry);
+        }
+        return true;
     }
 
     private static void AssertNotSourceDirectory(string target)

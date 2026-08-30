@@ -5,7 +5,7 @@ import unittest
 import hashlib
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "App Source" / "src"))
@@ -39,6 +39,17 @@ class UIThemeTests(unittest.TestCase):
             self.assertTrue({(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)}.issubset(image.ico.sizes()))
         with Image.open(assets / "favicon.ico") as image:
             self.assertTrue({(16, 16), (32, 32), (48, 48), (64, 64)}.issubset(image.ico.sizes()))
+
+        helper_colors = {}
+        for stem in ("technical_files_icon", "uninstall_icon"):
+            with Image.open(assets / f"{stem}.png") as image:
+                self.assertEqual(image.size, (512, 512))
+                center = image.convert("RGB").crop((128, 128, 384, 384))
+                helper_colors[stem] = ImageStat.Stat(center).mean
+            with Image.open(assets / f"{stem}.ico") as image:
+                self.assertTrue({(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)}.issubset(image.ico.sizes()))
+        self.assertGreater(helper_colors["technical_files_icon"][2], helper_colors["technical_files_icon"][0] * 2)
+        self.assertGreater(helper_colors["uninstall_icon"][0], helper_colors["uninstall_icon"][2] * 4)
 
     def test_only_the_approved_style_and_five_palettes_are_exposed(self) -> None:
         self.assertEqual(ui_themes.reload_themes(), ())

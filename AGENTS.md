@@ -15,8 +15,9 @@ project; never edit, synchronize into, or build the original AutoMockup project.
 - Preserve user `config.json`, `PNG`, `Mockup`, `Output` and `logs` when installing.
 - New installation chooses a parent and creates its `PNG Mockup` child; updates
   target the existing installation exactly. Never replace files while it runs.
-- Hide only this app's technical items. Uninstall preserves configuration,
-  work folders, logs and files added or modified by the user.
+- Hide only this app's technical items. Uninstall removes all application,
+  configuration, logs, update cache and owned temporary data; it preserves only
+  the `PNG`, `Mockup` and `Output` folders with their contents.
 - Never bundle GitHub credentials. Check and download in the background; apply
   an update only after explicit UI approval and the current session has closed.
 - Build installers under this project and verify extracted payload hashes,

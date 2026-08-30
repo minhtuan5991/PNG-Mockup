@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.2
+# PNG Mockup 1.1.3
 
 Biểu tượng ứng dụng dùng logo áo chữ E và mạch điện. Các thao tác mở thư mục,
 đổi tên, buộc dừng và mở Output được nhấn bằng chữ đậm; nút bảo trì hàng đợi và
@@ -86,19 +86,23 @@ xóa mục tương ứng nhưng vẫn giữ dữ liệu theo quy tắc bên dư�
 Bản cài thông thường chỉ hiện:
 
 - `PNG Mockup.exe`: khởi động ứng dụng.
-- `Uninstall.exe`: gỡ file chương trình sau khi bạn xác nhận.
-- `Show technical files.exe`: hiện/ẩn các file kỹ thuật của app.
+- `Uninstall.exe`: icon thùng rác đỏ; gỡ sạch app sau khi bạn xác nhận.
+- `Show technical files.exe`: icon bánh răng; hiện/ẩn các file kỹ thuật của app.
 - `PNG`, `Mockup`, `Output`: các thư mục làm việc.
 
 Runtime, mã nguồn, cấu hình, nhật ký và các file hỗ trợ vẫn nằm trong thư mục
 app nhưng mang thuộc tính Hidden. Nếu Explorer đang bật hiển thị file ẩn, bạn
 vẫn có thể thấy chúng. Tool không đổi thiết lập Explorer toàn hệ thống.
 
-Trước khi gỡ, đóng PNG Mockup. Uninstall giữ nguyên `config.json`, `PNG`,
-`Mockup`, `Output`, `logs` và các file bạn thêm hoặc sửa. Một biên nhận nhỏ trong
-`logs` giúp bộ cài nhận lại thư mục này nếu muốn cài lại. Gỡ app không gỡ
-Photoshop hoặc thay đổi Python/cài đặt Windows. Muốn xóa cả ảnh và dữ liệu,
-hãy tự sao lưu rồi xóa phần còn lại sau khi kiểm tra.
+Trước khi gỡ, đóng PNG Mockup. Uninstall chỉ giữ nguyên ba thư mục `PNG`,
+`Mockup`, `Output` cùng toàn bộ nội dung bên trong. `config.json`, `logs`, runtime,
+cache cập nhật, file kỹ thuật, file thêm/sửa khác trong thư mục app và thư mục
+tạm riêng của bản cài trên ổ C đều bị xóa. Shortcut và mục PNG Mockup trong
+Control Panel/Installed apps cũng bị xóa. Gỡ app không gỡ Photoshop.
+
+Sau khi gỡ, có thể cài lại vào thư mục `PNG Mockup` chỉ còn ba thư mục làm việc;
+bộ cài nhận đúng vị trí và không tạo thêm thư mục lồng. Các cài đặt cá nhân đã
+bị xóa sẽ trở về mặc định ở lần cài lại.
 
 ## Cập nhật ngầm
 

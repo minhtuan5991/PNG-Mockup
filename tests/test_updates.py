@@ -40,7 +40,8 @@ def package(*, version=VERSION, repository=REPOSITORY, change_files=None, change
     files = {name: b"test fixture" for name in (
         "PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe",
         "config.json", "src/gui.py", "src/app.py", "src/update_manager.py",
-        "assets/app_icon.ico", "runtime/python/python.exe", "runtime/python/pythonw.exe",
+        "assets/app_icon.ico", "assets/uninstall_icon.ico", "assets/technical_files_icon.ico",
+        "runtime/python/python.exe", "runtime/python/pythonw.exe",
         "runtime/python/python312.dll", "runtime/python/python312._pth",
         "runtime/python/Lib/tkinter/__init__.py", "runtime/python/Lib/site-packages/PIL/__init__.py",
         "runtime/python/tcl/tcl8.6/init.tcl", "runtime/python/tcl/tk8.6/tk.tcl",
@@ -520,7 +521,8 @@ class PayloadVerificationTests(UpdateFixture):
                 self.verify(package(change_files=lambda files: files.update({name: b"unsafe"})))
 
     def test_missing_required_installed_helpers_and_runtime_are_rejected(self):
-        for name in ("Uninstall.exe", "Show technical files.exe", "runtime/python/python312._pth",
+        for name in ("Uninstall.exe", "Show technical files.exe", "assets/uninstall_icon.ico",
+                     "assets/technical_files_icon.ico", "runtime/python/python312._pth",
                      "update-channel.json", "src/update_manager.py"):
             with self.subTest(name=name), self.assertRaises(updates.UpdateError):
                 self.verify(package(change_files=lambda files: files.pop(name)))

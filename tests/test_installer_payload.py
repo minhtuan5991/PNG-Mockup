@@ -182,7 +182,8 @@ class InstallerPayloadTests(unittest.TestCase):
         self.assertEqual(report["files"], len(self.manifest["files"]) + 1)
         with zipfile.ZipFile(io.BytesIO(self.zip_bytes)) as archive:
             names = archive.namelist()
-            for asset in ("assets/logo.png", "assets/app_icon.png", "assets/app_icon.ico", "assets/favicon.png", "assets/favicon.ico"):
+            for asset in ("assets/logo.png", "assets/app_icon.png", "assets/app_icon.ico", "assets/favicon.png", "assets/favicon.ico",
+                          "assets/technical_files_icon.png", "assets/technical_files_icon.ico", "assets/uninstall_icon.png", "assets/uninstall_icon.ico"):
                 self.assertIn(asset, names)
             for row in self.manifest["files"]:
                 content = archive.read(row["path"])
@@ -495,15 +496,21 @@ class InstallerPayloadTests(unittest.TestCase):
             self.assertIn("source", report["error"].lower())
         self.assertEqual({path.name: path.stat().st_file_attributes for path in source.iterdir()}, before)
 
-    def test_uninstall_requires_confirmation_then_preserves_data_unknown_and_modified_files(self) -> None:
-        target = self.install("Uninstall keep user data")
-        before = (target / "config.json").read_bytes()
-        for name in ("PNG", "Mockup", "Output", "logs"):
+    def test_uninstall_requires_confirmation_then_keeps_only_work_folders(self) -> None:
+        target = self.install("uninstall-fixture/PNG Mockup")
+        for name in ("PNG", "Mockup", "Output"):
             (target / name / "user-file.bin").write_bytes(("owned by user " + name).encode("utf-8"))
+        (target / "logs" / "user-file.bin").write_bytes(b"delete logs")
         unknown = target / "src" / "my-custom-file.py"
         unknown.write_text("# user extension\n", encoding="utf-8")
         modified = target / "src" / "gui.py"
-        modified.write_text("# locally edited program file: keep it\n", encoding="utf-8")
+        modified.write_text("# locally edited program file: remove it\n", encoding="utf-8")
+        top_level_unknown = target / "user-added.bin"
+        top_level_unknown.write_bytes(b"remove unknown app-root content")
+        install_id = hashlib.sha256(str(target.resolve()).casefold().encode("utf-8")).hexdigest()[:20]
+        app_temp = Path(os.environ.get("TEMP", os.environ.get("TMP", str(self.work)))) / "PNGMockup" / install_id
+        (app_temp / "psd_jobs").mkdir(parents=True, exist_ok=True)
+        (app_temp / "psd_jobs" / "scratch.bin").write_bytes(b"delete owned temp")
         desktop = self.work / "desktop-fixture"
         desktop.mkdir(exist_ok=True)
         powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
@@ -514,7 +521,7 @@ class InstallerPayloadTests(unittest.TestCase):
         code, preview = self.command(target / "Uninstall.exe", "/preview")
         self.assertEqual(code, 0, preview)
         self.assertEqual(preview["state"], "preview")
-        self.assertNotIn("config.json", preview["candidate_files"])
+        self.assertEqual(preview["preserved"], ["PNG", "Mockup", "Output"])
         code, rejected = self.command(target / "Uninstall.exe", "/uninstall")
         self.assertNotEqual(code, 0, rejected)
         self.assertIn("confirmation", rejected["error"])
@@ -524,25 +531,27 @@ class InstallerPayloadTests(unittest.TestCase):
         self.assertTrue(removed["ok"], removed)
         self.assertEqual(removed["state"], "uninstalled")
         self.assertTrue(removed["user_data_preserved"])
+        self.assertEqual(removed["preserved"], ["PNG", "Mockup", "Output"])
+        self.assertEqual(removed["cleanup_warnings"], [])
+        self.assertGreater(removed["freed_bytes"], 60_000_000)
         self.assertTrue(removed["control_panel_entry_removed"])
         self.assertEqual(removed["shortcut_result"], "removed_matching_shortcut")
         self.assertFalse((desktop / "PNG Mockup.lnk").exists())
-        for name in ("PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe", "setup_manifest.json", "version.json"):
-            self.assertFalse((target / name).exists(), name)
-        self.assertEqual((target / "config.json").read_bytes(), before)
-        self.assertTrue(unknown.is_file())
-        self.assertEqual(modified.read_text(encoding="utf-8"), "# locally edited program file: keep it\n")
-        self.assertIn("src/gui.py", removed["modified_files_preserved"])
-        for name in ("PNG", "Mockup", "Output", "logs"):
+        self.assertEqual({path.name for path in target.iterdir()}, {"PNG", "Mockup", "Output"})
+        self.assertFalse((target / "config.json").exists())
+        self.assertFalse(unknown.exists())
+        self.assertFalse(modified.exists())
+        self.assertFalse(top_level_unknown.exists())
+        self.assertFalse(app_temp.exists())
+        for name in ("PNG", "Mockup", "Output"):
             self.assertEqual((target / name / "user-file.bin").read_bytes(), ("owned by user " + name).encode("utf-8"))
-        receipt = json.loads((target / "logs" / ".installation.json").read_text(encoding="utf-8-sig"))
-        self.assertEqual((receipt["product_id"], receipt["state"]), ("png-mockup", "uninstalled"))
         code, restored = self.command(self.setup, "/install", str(target))
         self.assertEqual(code, 0, restored)
         self.assertEqual(Path(restored["target"]), target)
-        self.assertTrue(restored["config_preserved"])
-        self.assertTrue(unknown.is_file())
-        self.assertEqual((target / "config.json").read_bytes(), before)
+        self.assertFalse(restored["config_preserved"])
+        self.assertFalse((target / "PNG Mockup").exists())
+        for name in ("PNG", "Mockup", "Output"):
+            self.assertTrue((target / name / "user-file.bin").is_file())
 
     def test_installer_and_uninstaller_refuse_a_held_session_lock(self) -> None:
         target = self.install("Session lock guards")
