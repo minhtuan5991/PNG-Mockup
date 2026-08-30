@@ -472,12 +472,17 @@ internal static class InstallEngine
             }
             ProductSupport.WriteReceipt(target, "installed", payload.Version);
             ProductSupport.SetTechnicalVisibility(target, false);
+            long estimatedBytes = payload.Files.Sum(file => file.Length) + new FileInfo(SafeDestination(target, "setup_manifest.json")).Length;
+            string uninstallRegistryPath = ProductSupport.RegisterInstalledApplication(target, payload.Version, estimatedBytes);
             Dictionary<string, object> result = Summary(payload);
             result["target"] = target;
             result["config_preserved"] = preserveConfig;
             result["user_data_preserved"] = true;
             result["technical_files_hidden"] = true;
             result["session_lock_used"] = true;
+            result["control_panel_registered"] = true;
+            result["uninstall_registry_scope"] = "current_user";
+            result["uninstall_registry_path"] = uninstallRegistryPath;
             Report(progress, 100, "Cài đặt hoàn tất.");
             return result;
         }

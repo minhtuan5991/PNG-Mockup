@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Microsoft.Win32;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -28,6 +29,8 @@ internal sealed class ProductManifest
 internal static class ProductSupport
 {
     public const string ProductId = "png-mockup";
+    private const string ProductionUninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\png-mockup";
+    private const string TestUninstallRegistryEnvironment = "PNG_MOCKUP_TEST_UNINSTALL_KEY";
     public static readonly string[] VisibleItems = { "PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe", "PNG", "Mockup", "Output" };
     private static readonly HashSet<string> RootFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -258,6 +261,74 @@ internal static class ProductSupport
         string path = SafeDestination(root, "logs/.installation.json");
         WriteJson(path, new Dictionary<string, object> { { "product_id", ProductId }, { "name", "PNG Mockup" }, { "version", version }, { "state", state } });
         SetHidden(path, true);
+    }
+    public static string UninstallRegistryPath()
+    {
+        string testPath = Environment.GetEnvironmentVariable(TestUninstallRegistryEnvironment);
+        if (String.IsNullOrEmpty(testPath)) return ProductionUninstallRegistryPath;
+        if (!Regex.IsMatch(testPath, @"^Software\\PNGMockupTests\\[a-f0-9]{32}\\png-mockup$", RegexOptions.IgnoreCase))
+            throw new InvalidOperationException("The PNG Mockup test uninstall Registry path is invalid.");
+        return testPath;
+    }
+    private static string QuotedExecutable(string path) { return "\"" + path + "\""; }
+    public static string RegisterInstalledApplication(string root, string version, long estimatedBytes)
+    {
+        root = CanonicalRoot(root);
+        var identity = ValidateIdentity(root);
+        if (StringValue(identity, "version") != version || !Regex.IsMatch(version, @"^\d+\.\d+\.\d+$"))
+            throw new InvalidDataException("Control Panel registration requires the installed PNG Mockup version.");
+        string launcher = SafeDestination(root, "PNG Mockup.exe");
+        string uninstaller = SafeDestination(root, "Uninstall.exe");
+        AssertNoReparse(launcher);
+        AssertNoReparse(uninstaller);
+        if (!File.Exists(launcher) || !File.Exists(uninstaller))
+            throw new FileNotFoundException("Control Panel registration requires the installed launcher and uninstaller.");
+        string registryPath = UninstallRegistryPath();
+        string installDate = DateTime.Now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+        using (RegistryKey previous = Registry.CurrentUser.OpenSubKey(registryPath, false))
+        {
+            if (previous != null && String.Equals(previous.GetValue("InstallLocation") as string, root, StringComparison.OrdinalIgnoreCase))
+            {
+                string value = previous.GetValue("InstallDate") as string;
+                if (!String.IsNullOrEmpty(value) && Regex.IsMatch(value, @"^\d{8}$")) installDate = value;
+            }
+        }
+        long estimatedKilobytes = Math.Max(1, (estimatedBytes + 1023) / 1024);
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(registryPath, RegistryKeyPermissionCheck.ReadWriteSubTree))
+        {
+            if (key == null) throw new IOException("Windows did not create the PNG Mockup Control Panel registration.");
+            key.SetValue("DisplayName", "PNG Mockup", RegistryValueKind.String);
+            key.SetValue("DisplayVersion", version, RegistryValueKind.String);
+            key.SetValue("Publisher", "PNG Mockup", RegistryValueKind.String);
+            key.SetValue("InstallLocation", root, RegistryValueKind.String);
+            key.SetValue("InstallDate", installDate, RegistryValueKind.String);
+            key.SetValue("DisplayIcon", QuotedExecutable(launcher) + ",0", RegistryValueKind.String);
+            key.SetValue("UninstallString", QuotedExecutable(uninstaller), RegistryValueKind.String);
+            key.SetValue("QuietUninstallString", QuotedExecutable(uninstaller) + " /uninstall /yes", RegistryValueKind.String);
+            key.SetValue("URLInfoAbout", "https://github.com/minhtuan5991/PNG-Mockup", RegistryValueKind.String);
+            key.SetValue("NoModify", 1, RegistryValueKind.DWord);
+            key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+            key.SetValue("EstimatedSize", (int)Math.Min(Int32.MaxValue, estimatedKilobytes), RegistryValueKind.DWord);
+        }
+        return registryPath;
+    }
+    public static bool RemoveInstalledApplicationRegistration(string root)
+    {
+        root = CanonicalRoot(root, false, true);
+        string registryPath = UninstallRegistryPath();
+        string uninstaller = SafeDestination(root, "Uninstall.exe");
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(registryPath, false))
+        {
+            if (key == null) return true;
+            string registeredRoot = key.GetValue("InstallLocation") as string;
+            string registeredUninstaller = key.GetValue("UninstallString") as string;
+            if (!String.Equals(key.GetValue("DisplayName") as string, "PNG Mockup", StringComparison.Ordinal) ||
+                !String.Equals(registeredRoot == null ? null : registeredRoot.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase) ||
+                !String.Equals(registeredUninstaller, QuotedExecutable(uninstaller), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        Registry.CurrentUser.DeleteSubKeyTree(registryPath, false);
+        return true;
     }
     public static void SetHidden(string path, bool hidden)
     {

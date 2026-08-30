@@ -156,6 +156,7 @@ internal static class UninstallProgram
                 }
                 ProductSupport.WriteReceipt(root, "uninstalled", manifest.Version);
                 foreach (string name in new string[] { "PNG", "Mockup", "Output" }) ProductSupport.SetHidden(ProductSupport.SafeDestination(root, name), false);
+                bool registrationRemoved = ProductSupport.RemoveInstalledApplicationRegistration(root);
                 result["ok"] = true;
                 result["state"] = "uninstalled";
                 result["deleted_program_files"] = deleted;
@@ -164,6 +165,8 @@ internal static class UninstallProgram
                 result["root"] = root;
                 result["worker_retained_in_logs"] = Application.ExecutablePath;
                 result["shortcut_result"] = ProductSupport.RemoveOwnShortcut(root, ProductSupport.StringValue(request, "shortcut_directory"));
+                result["control_panel_entry_removed"] = registrationRemoved;
+                if (!registrationRemoved) result["control_panel_registration_preserved_for_other_install"] = true;
             }
             ProductSupport.WriteJson(report, result);
             if (interactive) MessageBox.Show("Đã gỡ chương trình PNG Mockup.\nCấu hình, PNG, Mockup, Output, logs và file riêng của bạn được giữ nguyên.", "PNG Mockup", MessageBoxButtons.OK, MessageBoxIcon.Information);

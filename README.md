@@ -37,6 +37,10 @@ Từ 1.1.1, logo áo chữ E được dùng đồng nhất cho cửa sổ, file 
 tài sản favicon; các thao tác thư mục chính có chữ đậm và nhóm bảo trì có viền
 xanh nhạt theo giao diện mới.
 
+Từ 1.1.2, bản cài đăng ký PNG Mockup theo người dùng hiện tại để ứng dụng xuất
+hiện trong Control Panel và Windows Settings. Cập nhật thay đổi version/dung
+lượng tại cùng mục; Uninstall xóa đăng ký nhưng vẫn giữ cấu hình và dữ liệu.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.

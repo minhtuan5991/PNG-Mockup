@@ -2,7 +2,7 @@
 
 All extraction, corrupt-fixture and junction tests stay in a unique build
 subdirectory. Fixtures are retained there for inspection; no existing app,
-Desktop shortcut, user profile, registry, or global Python is modified.
+Desktop shortcut, production uninstall Registry key, or global Python is modified.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import time
 import unittest
 import uuid
 import warnings
+import winreg
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,9 @@ class InstallerPayloadTests(unittest.TestCase):
         if (ROOT / "build").resolve() not in cls.work.parents:
             raise AssertionError("Installer test directory escaped this project.")
         cls.work.mkdir()
+        cls.uninstall_registry_key = "Software\\PNGMockupTests\\" + uuid.uuid4().hex + "\\png-mockup"
+        cls.previous_registry_override = os.environ.get("PNG_MOCKUP_TEST_UNINSTALL_KEY")
+        os.environ["PNG_MOCKUP_TEST_UNINSTALL_KEY"] = cls.uninstall_registry_key
         cls.binary = cls.setup.read_bytes()
         length, digest, marker = FOOTER.unpack(cls.binary[-FOOTER.size:])
         if marker != b"PNGMSP01" or not 0 < length < len(cls.binary) - FOOTER.size:
@@ -51,6 +55,27 @@ class InstallerPayloadTests(unittest.TestCase):
             cls.identity = json.loads(archive.read("version.json"))
             cls.channel = json.loads(archive.read("update-channel.json"))
         cls.expected_identity = json.loads((ROOT / "App Source" / "version.json").read_text(encoding="utf-8-sig"))
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for key in (cls.uninstall_registry_key, cls.uninstall_registry_key.rsplit("\\", 1)[0], "Software\\PNGMockupTests"):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except (FileNotFoundError, OSError):
+                pass
+        if cls.previous_registry_override is None:
+            os.environ.pop("PNG_MOCKUP_TEST_UNINSTALL_KEY", None)
+        else:
+            os.environ["PNG_MOCKUP_TEST_UNINSTALL_KEY"] = cls.previous_registry_override
+
+    @classmethod
+    def control_panel_registration(cls) -> dict[str, object]:
+        values: dict[str, object] = {}
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, cls.uninstall_registry_key) as key:
+            for index in range(winreg.QueryInfoKey(key)[1]):
+                name, value, _kind = winreg.EnumValue(key, index)
+                values[name] = value
+        return values
 
     def command(self, executable: Path, *args: str, env: dict[str, str] | None = None) -> tuple[int, dict]:
         report = self.work / ("report-" + uuid.uuid4().hex + ".json")
@@ -179,6 +204,25 @@ class InstallerPayloadTests(unittest.TestCase):
             self.assertTrue(channel["repository"] or not channel["enabled"])
         hash_file = self.setup.with_name(self.setup.name + ".sha256").read_text(encoding="ascii").split()[0]
         self.assertEqual(hash_file, hashlib.sha256(self.binary).hexdigest())
+
+    def test_control_panel_registration_identifies_install_and_uninstall_removes_it(self) -> None:
+        target = self.install("Control Panel registration")
+        values = self.control_panel_registration()
+        self.assertEqual(values["DisplayName"], "PNG Mockup")
+        self.assertEqual(values["DisplayVersion"], self.identity["version"])
+        self.assertEqual(values["Publisher"], "PNG Mockup")
+        self.assertEqual(Path(values["InstallLocation"]), target)
+        self.assertEqual(values["DisplayIcon"], f'"{target / "PNG Mockup.exe"}",0')
+        self.assertEqual(values["UninstallString"], f'"{target / "Uninstall.exe"}"')
+        self.assertEqual(values["QuietUninstallString"], f'"{target / "Uninstall.exe"}" /uninstall /yes')
+        self.assertEqual((values["NoModify"], values["NoRepair"]), (1, 1))
+        self.assertGreater(values["EstimatedSize"], 60_000)
+        self.assertRegex(values["InstallDate"], r"^\d{8}$")
+        code, removed = self.command(target / "Uninstall.exe", "/uninstall", "/yes")
+        self.assertEqual(code, 0, removed)
+        self.assertTrue(removed["control_panel_entry_removed"])
+        with self.assertRaises(FileNotFoundError):
+            self.control_panel_registration()
 
     def test_exact_unicode_install_location_and_isolated_runtime_relocation(self) -> None:
         target = self.install("Máy khác - kiểm tra PNG")
@@ -480,6 +524,7 @@ class InstallerPayloadTests(unittest.TestCase):
         self.assertTrue(removed["ok"], removed)
         self.assertEqual(removed["state"], "uninstalled")
         self.assertTrue(removed["user_data_preserved"])
+        self.assertTrue(removed["control_panel_entry_removed"])
         self.assertEqual(removed["shortcut_result"], "removed_matching_shortcut")
         self.assertFalse((desktop / "PNG Mockup.lnk").exists())
         for name in ("PNG Mockup.exe", "Uninstall.exe", "Show technical files.exe", "setup_manifest.json", "version.json"):

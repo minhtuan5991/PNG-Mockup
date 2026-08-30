@@ -20,6 +20,7 @@ import time
 import unittest
 from unittest.mock import patch
 import uuid
+import winreg
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,12 +86,27 @@ class UpdateInstallFlowTests(unittest.TestCase):
         if build_root not in cls.work.parents:
             raise AssertionError("Fixture directory escaped the project build directory.")
         cls.work.mkdir()
+        cls.uninstall_registry_key = "Software\\PNGMockupTests\\" + uuid.uuid4().hex + "\\png-mockup"
+        cls.previous_registry_override = os.environ.get("PNG_MOCKUP_TEST_UNINSTALL_KEY")
+        os.environ["PNG_MOCKUP_TEST_UNINSTALL_KEY"] = cls.uninstall_registry_key
         (cls.work / "FIXTURE-NOT-A-RELEASE.txt").write_text(
             "Simulated update endpoint and old version. No live GitHub download.\n"
             f"Test-only repository: {TEST_REPOSITORY}\n"
             "These repacked unsigned executables are test fixtures only; do not distribute them.\n",
             encoding="utf-8",
         )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for key in (cls.uninstall_registry_key, cls.uninstall_registry_key.rsplit("\\", 1)[0], "Software\\PNGMockupTests"):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except (FileNotFoundError, OSError):
+                pass
+        if cls.previous_registry_override is None:
+            os.environ.pop("PNG_MOCKUP_TEST_UNINSTALL_KEY", None)
+        else:
+            os.environ["PNG_MOCKUP_TEST_UNINSTALL_KEY"] = cls.previous_registry_override
 
     def make_fixture(self, version: str, name: str) -> tuple[Path, dict]:
         manifest = {"format": 1, "product_id": "png-mockup", "version": version, "files": []}
@@ -235,6 +251,9 @@ class UpdateInstallFlowTests(unittest.TestCase):
         self.assertFalse(result["relaunch_requested"])
         self.assertTrue(result["config_preserved"] and result["user_data_preserved"])
         self.assertEqual(update_manager.read_current_version(target), version)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.uninstall_registry_key) as key:
+            self.assertEqual(winreg.QueryValueEx(key, "DisplayVersion")[0], version)
+            self.assertEqual(Path(winreg.QueryValueEx(key, "InstallLocation")[0]), target)
         self.assertFalse((target / "PNG Mockup").exists(), "Update created a nested installation.")
         for row in manifest["files"]:
             if row["path"] != "config.json":

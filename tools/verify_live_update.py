@@ -166,6 +166,9 @@ def verify_live(repository: str, installer: Path, *, timeout: int = 300) -> Path
     build.mkdir(exist_ok=True)
     work = safe_path(build / ("live-update-check-" + uuid.uuid4().hex))
     work.mkdir()
+    uninstall_registry_key = "Software\\PNGMockupTests\\" + uuid.uuid4().hex + "\\png-mockup"
+    installer_environment = dict(os.environ)
+    installer_environment["PNG_MOCKUP_TEST_UNINSTALL_KEY"] = uninstall_registry_key
     fixture = checked_fixture(work / FIXTURE_NAME)
     report_path = work / "live-update-result.json"
     report = {
@@ -189,6 +192,7 @@ def verify_live(repository: str, installer: Path, *, timeout: int = 300) -> Path
         process = subprocess.run(
             [str(installer), "/extract", str(fixture), "/report", str(extract_report)],
             cwd=work, timeout=min(120, deadline.remaining()), check=False,
+            env=installer_environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
@@ -243,6 +247,12 @@ def verify_live(repository: str, installer: Path, *, timeout: int = 300) -> Path
         report["error"] = str(error)
         raise LiveVerificationError(f"Verification failed: {error}\nReport: {report_path}") from None
     finally:
+        import winreg
+        for key in (uninstall_registry_key, uninstall_registry_key.rsplit("\\", 1)[0], "Software\\PNGMockupTests"):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except (FileNotFoundError, OSError):
+                pass
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         write_json(report_path, report)
     return report_path

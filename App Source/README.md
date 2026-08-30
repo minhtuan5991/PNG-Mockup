@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.1
+# PNG Mockup 1.1.2
 
 Biểu tượng ứng dụng dùng logo áo chữ E và mạch điện. Các thao tác mở thư mục,
 đổi tên, buộc dừng và mở Output được nhấn bằng chữ đậm; nút bảo trì hàng đợi và
@@ -74,6 +74,12 @@ Cài lại bằng bộ cài PNG Mockup vào đúng thư mục sẽ giữ cấu h
 `PNG`, `Mockup`, `Output`, `logs`. Nếu chọn đúng thư mục đã cài, bộ cài nhận diện
 bản hiện có và không tạo thêm một thư mục `PNG Mockup` lồng bên trong. Vẫn nên
 sao lưu dữ liệu quan trọng trước khi cập nhật.
+
+Sau khi cài, **PNG Mockup** xuất hiện trong **Control Panel → Programs and
+Features** và **Settings → Installed apps** của tài khoản Windows hiện tại.
+Mục này hiển thị phiên bản, nhà phát hành, dung lượng và gọi đúng `Uninstall.exe`
+trong thư mục app. Cập nhật app sẽ cập nhật thông tin này; gỡ app thành công sẽ
+xóa mục tương ứng nhưng vẫn giữ dữ liệu theo quy tắc bên dưới.
 
 ## Thư mục gọn và gỡ cài đặt
 
