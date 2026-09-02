@@ -442,7 +442,7 @@ class PngMockupGui:
         body = scroll.body
         body.columnconfigure((0, 1), weight=1, uniform="tools")
         cards = (
-            ("Kích thước & nén PNG", "Thay đổi kích thước và Giảm dung lượng file PNG cho POD", "Chọn ảnh để xử lý", self.open_batch_image_resize, "batch_resize", "resize"),
+            ("Kích thước & nén PNG", "Thay đổi kích thước và Nén dung lượng PNG phù hợp cho POD", "Chọn ảnh để xử lý", self.open_batch_image_resize, "batch_resize", "resize"),
             ("Metadata & Watermark", "Xóa metadata hoặc thêm watermark cho các ảnh được chọn. Không phụ thuộc cài đặt tự động.", "Chọn ảnh để xử lý", self.open_manual_metadata_cleaner, "batch_metadata_clean", "watermark"),
             ("Đổi tên PNG", "Áp dụng .wh / .bl và .f / .b, xem trước tên mới. Không ghi đè file đã tồn tại.", "Đổi tên PNG", lambda: self.open_file_renamer(load_config().png_dir, "PNG", PNG_IMAGE_EXTS, "png"), "rename_png_tools", "image"),
             ("Đổi tên Mockup", "Chọn màu áo và số mặt .1S / .2S cho phôi PSD. Giữ nguyên phần mở rộng của file.", "Đổi tên Mockup", lambda: self.open_file_renamer(load_config().mockup_dir, "Mockup", MOCKUP_FILE_EXTS, "mockup"), "rename_mockup_tools", "layers"),

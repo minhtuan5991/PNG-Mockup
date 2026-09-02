@@ -111,7 +111,7 @@ def main() -> int:
                 continue
             if text:
                 visible_texts.add(text)
-        assert "Thay đổi kích thước và Giảm dung lượng file PNG cho POD" in visible_texts
+        assert "Thay đổi kích thước và Nén dung lượng PNG phù hợp cho POD" in visible_texts
         assert str(app.buttons["png"].cget("style")) == "Bold.TButton"
         assert str(app.buttons["mockup"].cget("style")) == "Bold.TButton"
         assert str(app.buttons["rename_png"].cget("text")) == "Đổi Tên"

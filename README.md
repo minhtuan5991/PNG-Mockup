@@ -58,7 +58,7 @@ hơn kết quả iLoveIMG 4.157.821 byte trong khi PSNR đo trên nền trắng 
 có một lựa chọn **Nén ảnh PNG**.
 
 Từ 1.1.6, thẻ **Kích thước & nén PNG** dùng nút **Chọn ảnh để xử lý** và mô tả
-**Thay đổi kích thước và Giảm dung lượng file PNG cho POD**. Logic xử lý và các
+**Thay đổi kích thước và Nén dung lượng PNG phù hợp cho POD**. Logic xử lý và các
 cài đặt khác không thay đổi.
 
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
