@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import subprocess
 import uuid
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,18 @@ OXIPNG_OPT_LEVEL = 4
 OXIPNG_THREADS = 2
 OXIPNG_TIMEOUT_SEC = 900
 DEFAULT_OXIPNG_PATH = APP_ROOT / "tools" / "oxipng" / "oxipng.exe"
+LIBWEBP_VERSION = "1.6.0"
+DEFAULT_CWEBP_PATH = APP_ROOT / "tools" / "libwebp" / "cwebp.exe"
+DEFAULT_DWEBP_PATH = APP_ROOT / "tools" / "libwebp" / "dwebp.exe"
+POD_TARGET_SAVINGS = 0.35
+POD_PRIMARY_NEAR_LOSSLESS = 50
+POD_SECONDARY_NEAR_LOSSLESS = 30
+POD_RECOVERY_NEAR_LOSSLESS = 70
+POD_MIN_PSNR_DB = 48.0
+POD_PRIMARY_MAX_CHANNEL_DELTA = 4
+POD_SECONDARY_MAX_CHANNEL_DELTA = 8
+POD_RECOVERY_MAX_CHANNEL_DELTA = 2
+POD_WEBP_METHOD = 4
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DISPLAY_CHUNKS = {
     b"IHDR",
@@ -32,6 +45,7 @@ DISPLAY_CHUNKS = {
     b"bKGD",
     b"hIST",
 }
+PRINT_CHUNKS = {b"cHRM", b"gAMA", b"sRGB", b"cICP", b"pHYs", b"iCCP"}
 
 
 @dataclass(frozen=True)
@@ -59,10 +73,18 @@ class PngOptimizationResult:
     output_path: Path
     input_bytes: int
     output_bytes: int
+    compression_mode: str = "lossless"
+    target_achieved: bool = False
+    psnr_db: float | None = None
+    max_channel_delta: int = 0
 
     @property
     def saved_bytes(self) -> int:
         return max(0, self.input_bytes - self.output_bytes)
+
+    @property
+    def saved_fraction(self) -> float:
+        return self.saved_bytes / self.input_bytes if self.input_bytes else 0.0
 
 
 @dataclass(frozen=True)
@@ -72,6 +94,8 @@ class PngProcessingResult:
     compressed: bool
     input_bytes_for_compression: int
     output_bytes: int
+    compression_mode: str = ""
+    target_achieved: bool = False
 
     @property
     def saved_bytes(self) -> int:
@@ -87,6 +111,21 @@ class _PngFingerprint:
     pixel_sha256: str
     metadata: tuple[tuple[str, Any], ...]
     display_chunks: tuple[tuple[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class _PngQualityMetrics:
+    psnr_db: float
+    max_channel_delta: int
+    alpha_exact: bool
+
+
+@dataclass(frozen=True)
+class _PngCandidate:
+    path: Path
+    quality: int
+    metrics: _PngQualityMetrics
+    output_bytes: int
 
 
 def inspect_png(path: Path) -> PngImageInfo:
@@ -238,6 +277,455 @@ def optimize_png_lossless(
         temporary.unlink(missing_ok=True)
 
 
+def optimize_png_for_pod(
+    source_path: Path,
+    output_path: Path,
+    *,
+    cwebp_executable: Path | None = None,
+    dwebp_executable: Path | None = None,
+    oxipng_executable: Path | None = None,
+    timeout_sec: int = OXIPNG_TIMEOUT_SEC,
+) -> PngOptimizationResult:
+    """Compress one PNG with a quality-gated, automatic POD workflow.
+
+    The user does not choose a preset. The fast primary pass targets the normal
+    35% saving threshold. A stronger pass is attempted only when the primary
+    pass is safe but misses the target. Alpha is restored exactly and print
+    rendering chunks are copied from the source before final PNG optimization.
+    """
+
+    source = source_path.resolve()
+    output = output_path.resolve()
+    cwebp = (cwebp_executable or DEFAULT_CWEBP_PATH).resolve()
+    dwebp = (dwebp_executable or DEFAULT_DWEBP_PATH).resolve()
+    oxipng = (oxipng_executable or DEFAULT_OXIPNG_PATH).resolve()
+
+    info = inspect_png(source)
+    if output.suffix.casefold() != ".png":
+        raise ValueError(f"Output phải là file PNG: {output.name}")
+    if source == output:
+        raise ValueError("Nén PNG phải ghi ra file mới để giữ nguyên ảnh nguồn.")
+    if output.exists():
+        raise FileExistsError(f"Output đã tồn tại: {output}")
+    if timeout_sec <= 0:
+        raise ValueError("Timeout nén PNG phải lớn hơn 0.")
+
+    # cwebp is an 8-bit codec. Keep 16-bit and unusual PNG modes fully lossless
+    # instead of silently reducing their precision.
+    if info.mode not in {"RGB", "RGBA", "P", "L", "LA", "PA"}:
+        fallback = optimize_png_lossless(
+            source, output, executable=oxipng, timeout_sec=timeout_sec
+        )
+        return PngOptimizationResult(
+            output_path=fallback.output_path,
+            input_bytes=fallback.input_bytes,
+            output_bytes=fallback.output_bytes,
+            compression_mode="lossless-precision-fallback",
+            target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
+        )
+
+    missing = [path for path in (cwebp, dwebp) if not path.is_file()]
+    if missing:
+        fallback = optimize_png_lossless(
+            source, output, executable=oxipng, timeout_sec=timeout_sec
+        )
+        return PngOptimizationResult(
+            output_path=fallback.output_path,
+            input_bytes=fallback.input_bytes,
+            output_bytes=fallback.output_bytes,
+            compression_mode="lossless-tool-fallback",
+            target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
+        )
+    if not oxipng.is_file():
+        raise FileNotFoundError(
+            "Không tìm thấy oxipng đi kèm ứng dụng. Hãy cài lại hoặc cập nhật "
+            f"PNG Mockup: {oxipng}"
+        )
+
+    input_bytes = source.stat().st_size
+    output.parent.mkdir(parents=True, exist_ok=True)
+    candidates: list[_PngCandidate] = []
+    selected: _PngCandidate | None = None
+    try:
+        try:
+            primary = _build_near_lossless_candidate(
+                source,
+                output,
+                quality=POD_PRIMARY_NEAR_LOSSLESS,
+                max_channel_delta=POD_PRIMARY_MAX_CHANNEL_DELTA,
+                cwebp=cwebp,
+                dwebp=dwebp,
+                oxipng=oxipng,
+                timeout_sec=timeout_sec,
+            )
+            candidates.append(primary)
+        except (OSError, RuntimeError, ValueError):
+            primary = None
+
+        if primary is not None:
+            selected = primary
+            primary_saving = max(0.0, 1.0 - primary.output_bytes / input_bytes)
+            if primary_saving < POD_TARGET_SAVINGS:
+                try:
+                    secondary = _build_near_lossless_candidate(
+                        source,
+                        output,
+                        quality=POD_SECONDARY_NEAR_LOSSLESS,
+                        max_channel_delta=POD_SECONDARY_MAX_CHANNEL_DELTA,
+                        cwebp=cwebp,
+                        dwebp=dwebp,
+                        oxipng=oxipng,
+                        timeout_sec=timeout_sec,
+                    )
+                    candidates.append(secondary)
+                    if secondary.output_bytes < selected.output_bytes:
+                        selected = secondary
+                except (OSError, RuntimeError, ValueError):
+                    pass
+        else:
+            try:
+                recovery = _build_near_lossless_candidate(
+                    source,
+                    output,
+                    quality=POD_RECOVERY_NEAR_LOSSLESS,
+                    max_channel_delta=POD_RECOVERY_MAX_CHANNEL_DELTA,
+                    cwebp=cwebp,
+                    dwebp=dwebp,
+                    oxipng=oxipng,
+                    timeout_sec=timeout_sec,
+                )
+                candidates.append(recovery)
+                selected = recovery
+            except (OSError, RuntimeError, ValueError):
+                selected = None
+
+        if selected is None or selected.output_bytes >= input_bytes:
+            fallback = optimize_png_lossless(
+                source, output, executable=oxipng, timeout_sec=timeout_sec
+            )
+            return PngOptimizationResult(
+                output_path=fallback.output_path,
+                input_bytes=fallback.input_bytes,
+                output_bytes=fallback.output_bytes,
+                compression_mode="lossless-quality-fallback",
+                target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
+            )
+
+        if output.exists():
+            raise FileExistsError(f"Output đã tồn tại: {output}")
+        selected.path.rename(output)
+        saved_fraction = max(0.0, 1.0 - output.stat().st_size / input_bytes)
+        return PngOptimizationResult(
+            output_path=output,
+            input_bytes=input_bytes,
+            output_bytes=output.stat().st_size,
+            compression_mode=f"pod-near-lossless-{selected.quality}",
+            target_achieved=saved_fraction >= POD_TARGET_SAVINGS,
+            psnr_db=selected.metrics.psnr_db,
+            max_channel_delta=selected.metrics.max_channel_delta,
+        )
+    finally:
+        for candidate in candidates:
+            candidate.path.unlink(missing_ok=True)
+
+
+def _build_near_lossless_candidate(
+    source: Path,
+    output: Path,
+    *,
+    quality: int,
+    max_channel_delta: int,
+    cwebp: Path,
+    dwebp: Path,
+    oxipng: Path,
+    timeout_sec: int,
+) -> _PngCandidate:
+    token = uuid.uuid4().hex
+    prefix = output.with_name(f".{output.stem}.{token}.q{quality}")
+    webp_path = prefix.with_suffix(".tmp.webp")
+    decoded_path = prefix.with_suffix(".decoded.tmp.png")
+    restored_path = prefix.with_suffix(".restored.tmp.png")
+    metadata_path = prefix.with_suffix(".metadata.tmp.png")
+    optimized_path = prefix.with_suffix(".optimized.tmp.png")
+    success = False
+    try:
+        _run_image_tool(
+            [
+                str(cwebp),
+                "-quiet",
+                "-lossless",
+                "-near_lossless",
+                str(quality),
+                "-m",
+                str(POD_WEBP_METHOD),
+                "-mt",
+                "-alpha_q",
+                "100",
+                "-alpha_filter",
+                "best",
+                "-metadata",
+                "none",
+                str(source),
+                "-o",
+                str(webp_path),
+            ],
+            executable=cwebp,
+            timeout_sec=timeout_sec,
+            source_name=source.name,
+        )
+        _run_image_tool(
+            [str(dwebp), "-quiet", str(webp_path), "-o", str(decoded_path)],
+            executable=dwebp,
+            timeout_sec=timeout_sec,
+            source_name=source.name,
+        )
+        if not decoded_path.is_file():
+            raise RuntimeError(f"dwebp không tạo output cho {source.name}.")
+
+        _restore_source_alpha(source, decoded_path, restored_path)
+        _copy_print_chunks(source, restored_path, metadata_path)
+        _run_image_tool(
+            [
+                str(oxipng),
+                "-o",
+                "2",
+                "--alpha",
+                "--quiet",
+                "--threads",
+                str(OXIPNG_THREADS),
+                "--out",
+                str(optimized_path),
+                str(metadata_path),
+            ],
+            executable=oxipng,
+            timeout_sec=timeout_sec,
+            source_name=source.name,
+        )
+        if not optimized_path.is_file():
+            raise RuntimeError(f"oxipng không tạo output cho {source.name}.")
+
+        metrics = _validate_pod_candidate(source, optimized_path)
+        if (
+            not metrics.alpha_exact
+            or metrics.max_channel_delta > max_channel_delta
+            or metrics.psnr_db < POD_MIN_PSNR_DB
+        ):
+            raise ValueError(
+                f"Kết quả q{quality} không đạt cổng chất lượng in POD "
+                f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
+                f"{metrics.max_channel_delta})."
+            )
+        success = True
+        return _PngCandidate(
+            path=optimized_path,
+            quality=quality,
+            metrics=metrics,
+            output_bytes=optimized_path.stat().st_size,
+        )
+    finally:
+        for temporary in (webp_path, decoded_path, restored_path, metadata_path):
+            temporary.unlink(missing_ok=True)
+        if not success:
+            optimized_path.unlink(missing_ok=True)
+
+
+def _run_image_tool(
+    command: list[str],
+    *,
+    executable: Path,
+    timeout_sec: int,
+    source_name: str,
+) -> None:
+    creationflags = (
+        int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=executable.parent,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_sec,
+            check=False,
+            creationflags=creationflags,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"{executable.name} quá thời gian {timeout_sec} giây khi nén {source_name}."
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(f"Không chạy được {executable.name}: {exc}") from exc
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "không có chi tiết").strip()
+        raise RuntimeError(
+            f"{executable.name} lỗi (exit code {result.returncode}) với "
+            f"{source_name}: {details}"
+        )
+
+
+def _source_has_alpha(image: Image.Image) -> bool:
+    return "A" in image.getbands() or "transparency" in image.info
+
+
+def _restore_source_alpha(source_path: Path, decoded_path: Path, output_path: Path) -> None:
+    with Image.open(source_path) as source, Image.open(decoded_path) as decoded:
+        source.load()
+        decoded.load()
+        if decoded.size != source.size:
+            raise RuntimeError("Kết quả nén đã thay đổi kích thước ảnh.")
+        if _source_has_alpha(source):
+            source_rgba = source.convert("RGBA")
+            candidate = decoded.convert("RGBA")
+            alpha = source_rgba.getchannel("A")
+            try:
+                candidate.putalpha(alpha)
+                candidate.save(output_path, format="PNG", compress_level=1)
+            finally:
+                alpha.close()
+                source_rgba.close()
+                candidate.close()
+        else:
+            candidate = decoded.convert("RGB")
+            try:
+                candidate.save(output_path, format="PNG", compress_level=1)
+            finally:
+                candidate.close()
+
+
+def _validate_pod_candidate(source_path: Path, candidate_path: Path) -> _PngQualityMetrics:
+    with Image.open(source_path) as source, Image.open(candidate_path) as candidate:
+        source.load()
+        candidate.load()
+        if source.size != candidate.size:
+            raise RuntimeError("Kết quả nén đã thay đổi kích thước ảnh.")
+        if int(getattr(candidate, "n_frames", 1) or 1) != 1:
+            raise RuntimeError("Kết quả nén không phải PNG tĩnh.")
+        source_rgba = source.convert("RGBA")
+        candidate_rgba = candidate.convert("RGBA")
+        try:
+            metrics = _measure_composited_quality(source_rgba, candidate_rgba)
+        finally:
+            source_rgba.close()
+            candidate_rgba.close()
+
+    if _print_chunk_fingerprint(source_path) != _print_chunk_fingerprint(candidate_path):
+        raise RuntimeError("Kết quả nén không giữ nguyên ICC/DPI và thông tin màu in.")
+    return metrics
+
+
+def _measure_composited_quality(
+    source: Image.Image, candidate: Image.Image, *, tile_size: int = 512
+) -> _PngQualityMetrics:
+    source_alpha = source.getchannel("A")
+    candidate_alpha = candidate.getchannel("A")
+    try:
+        alpha_exact = ImageChops.difference(source_alpha, candidate_alpha).getbbox() is None
+    finally:
+        source_alpha.close()
+        candidate_alpha.close()
+
+    squared_error = 0
+    channel_count = source.width * source.height * 3
+    maximum = 0
+    for top in range(0, source.height, tile_size):
+        for left in range(0, source.width, tile_size):
+            box = (
+                left,
+                top,
+                min(source.width, left + tile_size),
+                min(source.height, top + tile_size),
+            )
+            source_tile = source.crop(box)
+            candidate_tile = candidate.crop(box)
+            background = Image.new("RGBA", source_tile.size, (255, 255, 255, 255))
+            source_print = Image.alpha_composite(background, source_tile).convert("RGB")
+            candidate_print = Image.alpha_composite(background, candidate_tile).convert("RGB")
+            difference = ImageChops.difference(source_print, candidate_print)
+            try:
+                histogram = difference.histogram()
+                squared_error += sum(
+                    (index % 256) ** 2 * count
+                    for index, count in enumerate(histogram)
+                )
+                extrema = difference.getextrema()
+                maximum = max(maximum, *(int(item[1]) for item in extrema))
+            finally:
+                difference.close()
+                candidate_print.close()
+                source_print.close()
+                background.close()
+                candidate_tile.close()
+                source_tile.close()
+
+    mse = squared_error / channel_count if channel_count else 0.0
+    psnr_db = math.inf if mse == 0 else 10.0 * math.log10((255.0**2) / mse)
+    return _PngQualityMetrics(
+        psnr_db=psnr_db,
+        max_channel_delta=maximum,
+        alpha_exact=alpha_exact,
+    )
+
+
+def _copy_print_chunks(source_path: Path, png_path: Path, output_path: Path) -> None:
+    source_chunks = [
+        (chunk_type, data)
+        for chunk_type, data in _read_raw_png_chunks(source_path)
+        if chunk_type in PRINT_CHUNKS
+    ]
+    decoded_chunks = _read_raw_png_chunks(png_path)
+    with output_path.open("xb") as stream:
+        stream.write(PNG_SIGNATURE)
+        inserted = False
+        for chunk_type, data in decoded_chunks:
+            if chunk_type in PRINT_CHUNKS:
+                continue
+            _write_png_chunk(stream, chunk_type, data)
+            if chunk_type == b"IHDR" and not inserted:
+                for source_type, source_data in source_chunks:
+                    _write_png_chunk(stream, source_type, source_data)
+                inserted = True
+
+
+def _write_png_chunk(stream: Any, chunk_type: bytes, data: bytes) -> None:
+    stream.write(len(data).to_bytes(4, "big"))
+    stream.write(chunk_type)
+    stream.write(data)
+    stream.write((zlib.crc32(chunk_type + data) & 0xFFFFFFFF).to_bytes(4, "big"))
+
+
+def _read_raw_png_chunks(path: Path) -> list[tuple[bytes, bytes]]:
+    chunks: list[tuple[bytes, bytes]] = []
+    with path.open("rb") as stream:
+        if stream.read(len(PNG_SIGNATURE)) != PNG_SIGNATURE:
+            raise RuntimeError(f"Sai PNG signature: {path.name}")
+        while True:
+            length_bytes = stream.read(4)
+            if len(length_bytes) != 4:
+                raise RuntimeError(f"PNG bị cắt ngắn: {path.name}")
+            length = int.from_bytes(length_bytes, "big")
+            chunk_type = stream.read(4)
+            data = stream.read(length)
+            crc = stream.read(4)
+            if len(chunk_type) != 4 or len(data) != length or len(crc) != 4:
+                raise RuntimeError(f"PNG bị cắt ngắn: {path.name}")
+            expected = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
+            if int.from_bytes(crc, "big") != expected:
+                raise RuntimeError(f"PNG có CRC không hợp lệ: {path.name}")
+            chunks.append((chunk_type, data))
+            if chunk_type == b"IEND":
+                return chunks
+
+
+def _print_chunk_fingerprint(path: Path) -> tuple[tuple[str, Any], ...]:
+    return tuple(
+        item
+        for item in _read_display_chunks(path)
+        if item[0].encode("ascii") in PRINT_CHUNKS
+    )
+
+
 def process_png_file(
     source_path: Path,
     output_path: Path,
@@ -256,10 +744,10 @@ def process_png_file(
         raise FileExistsError(f"Output đã tồn tại: {output}")
 
     if output_layout is None:
-        optimized = optimize_png_lossless(
+        optimized = optimize_png_for_pod(
             source,
             output,
-            executable=executable,
+            oxipng_executable=executable,
         )
         return PngProcessingResult(
             output_path=output,
@@ -267,6 +755,8 @@ def process_png_file(
             compressed=True,
             input_bytes_for_compression=optimized.input_bytes,
             output_bytes=optimized.output_bytes,
+            compression_mode=optimized.compression_mode,
+            target_achieved=optimized.target_achieved,
         )
 
     from transparent_image_layout import resize_transparent_png
@@ -286,10 +776,10 @@ def process_png_file(
     )
     try:
         resize_transparent_png(source, staging, output_layout, dpi=dpi)
-        optimized = optimize_png_lossless(
+        optimized = optimize_png_for_pod(
             staging,
             output,
-            executable=executable,
+            oxipng_executable=executable,
         )
         return PngProcessingResult(
             output_path=output,
@@ -297,6 +787,8 @@ def process_png_file(
             compressed=True,
             input_bytes_for_compression=optimized.input_bytes,
             output_bytes=optimized.output_bytes,
+            compression_mode=optimized.compression_mode,
+            target_achieved=optimized.target_achieved,
         )
     finally:
         staging.unlink(missing_ok=True)

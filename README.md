@@ -16,9 +16,9 @@ Tải bộ cài chính thức tại [GitHub Releases](https://github.com/minhtua
 - `App Source/README.md`: hướng dẫn sử dụng đi kèm bộ cài.
 - `verification/`: kết quả kiểm thử và đối chiếu bản đóng gói.
 
-Bộ cài kèm Python/Tk, Pillow và oxipng riêng. Không cần cài sẵn Python, app cũ,
-trình duyệt hoặc các model AI. Máy đích vẫn cần Adobe Photoshop có Automation/COM
-hoạt động. Không có bản quyền hoặc bộ cài Photoshop đi kèm.
+Bộ cài kèm Python/Tk, Pillow, oxipng và libwebp riêng. Không cần cài sẵn Python,
+app cũ, trình duyệt hoặc các model AI. Máy đích vẫn cần Adobe Photoshop có
+Automation/COM hoạt động. Không có bản quyền hoặc bộ cài Photoshop đi kèm.
 
 ## Cấu trúc phát triển
 
@@ -45,6 +45,10 @@ Từ 1.1.3, `Uninstall.exe` dùng icon thùng rác đỏ và
 `Show technical files.exe` dùng icon bánh răng riêng. Gỡ cài đặt xóa chương
 trình, cấu hình, logs, cache cập nhật, file tạm riêng, shortcut và đăng ký
 Windows; chỉ giữ ba thư mục `PNG`, `Mockup`, `Output` cùng nội dung bên trong.
+
+Từ 1.1.4, nút **Nén ảnh PNG** dùng một luồng tự động cho in POD. App nhắm giảm
+khoảng 35–40%, giữ kích thước, alpha, ICC/DPI và chỉ nhận kết quả qua cổng kiểm
+tra chất lượng; ảnh không thể đạt mục tiêu sẽ dùng kết quả an toàn hơn.
 
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.

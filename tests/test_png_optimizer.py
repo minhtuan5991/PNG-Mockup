@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image, PngImagePlugin
+from PIL import Image, ImageDraw, PngImagePlugin
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +36,49 @@ def create_png(
         icc_profile=b"automockup-print-profile",
         pnginfo=metadata,
     )
+    image.close()
+
+
+def create_pod_art(path: Path) -> None:
+    size = 1400
+    scale = 2
+    image = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    for y in range(180 * scale, 1220 * scale, 8):
+        color = (20 + (y // scale) % 90, 65, 180, 242)
+        draw.rectangle((180 * scale, y, 1220 * scale, y + 8), fill=color)
+    draw.rounded_rectangle(
+        (150 * scale, 150 * scale, 1250 * scale, 1250 * scale),
+        radius=170 * scale,
+        fill=(242, 75, 45, 238),
+        outline=(255, 244, 220, 255),
+        width=22 * scale,
+    )
+    draw.ellipse(
+        (360 * scale, 320 * scale, 1040 * scale, 1000 * scale),
+        fill=(20, 32, 45, 255),
+        outline=(255, 210, 35, 255),
+        width=26 * scale,
+    )
+    for number in range(14):
+        x = (250 + number * 70) * scale
+        draw.line(
+            (x, 1040 * scale, x + 120 * scale, 1170 * scale),
+            fill=(255, 255, 255, 245),
+            width=9 * scale,
+        )
+    resized = image.resize((size, size), Image.Resampling.LANCZOS)
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("AutoMockupTest", "safe to strip for POD output")
+    resized.save(
+        path,
+        format="PNG",
+        compress_level=6,
+        dpi=(300, 300),
+        icc_profile=b"automockup-print-profile",
+        pnginfo=metadata,
+    )
+    resized.close()
     image.close()
 
 
@@ -100,6 +143,65 @@ class PngOptimizationTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn(f"oxipng {png_optimizer.OXIPNG_VERSION}", result.stdout)
+
+    def test_bundled_libwebp_is_pinned_with_license_and_patent_grant(self) -> None:
+        expected = {
+            png_optimizer.DEFAULT_CWEBP_PATH: (
+                "6a2f5cb5dce71366353ab1d9caf9c636e039f25703acfce1c148eed346f2f72a"
+            ),
+            png_optimizer.DEFAULT_DWEBP_PATH: (
+                "17c1488bf84b7834e9aa908bb40afd0be2e55d57567d210e96336c56bb6ae993"
+            ),
+        }
+        for executable, digest in expected.items():
+            self.assertTrue(executable.is_file())
+            self.assertEqual(hashlib.sha256(executable.read_bytes()).hexdigest(), digest)
+            result = subprocess.run(
+                [str(executable), "-version"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+            )
+            self.assertEqual(result.returncode, 0)
+            self.assertIn(png_optimizer.LIBWEBP_VERSION, result.stdout)
+        self.assertTrue((png_optimizer.DEFAULT_CWEBP_PATH.parent / "COPYING").is_file())
+        self.assertTrue((png_optimizer.DEFAULT_CWEBP_PATH.parent / "PATENTS").is_file())
+
+    def test_real_pod_compression_hits_target_and_preserves_print_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Thiết kế POD.png"
+            output = root / "Done Nén PNG" / source.name
+            create_pod_art(source)
+            source_bytes = source.read_bytes()
+
+            result = png_optimizer.optimize_png_for_pod(source, output)
+
+            self.assertEqual(source.read_bytes(), source_bytes)
+            self.assertTrue(result.compression_mode.startswith("pod-near-lossless-"))
+            self.assertTrue(result.target_achieved)
+            self.assertGreaterEqual(result.saved_fraction, png_optimizer.POD_TARGET_SAVINGS)
+            self.assertGreaterEqual(result.psnr_db, png_optimizer.POD_MIN_PSNR_DB)
+            self.assertLessEqual(
+                result.max_channel_delta,
+                png_optimizer.POD_PRIMARY_MAX_CHANNEL_DELTA,
+            )
+            with Image.open(source) as original, Image.open(output) as optimized:
+                original.load()
+                optimized.load()
+                self.assertEqual(original.size, optimized.size)
+                self.assertEqual(
+                    original.convert("RGBA").getchannel("A").tobytes(),
+                    optimized.convert("RGBA").getchannel("A").tobytes(),
+                )
+                self.assertEqual(
+                    original.info.get("icc_profile"), optimized.info.get("icc_profile")
+                )
+                self.assertEqual(original.info.get("dpi"), optimized.info.get("dpi"))
+                self.assertNotIn("AutoMockupTest", optimized.info)
 
     def test_real_oxipng_reduces_size_without_changing_pixels_color_or_dpi(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -263,7 +365,7 @@ class PngProcessingTests(unittest.TestCase):
 
             with patch.object(
                 png_optimizer,
-                "optimize_png_lossless",
+                "optimize_png_for_pod",
                 return_value=fake_result,
             ) as optimize:
                 result = png_optimizer.process_png_file(
@@ -274,7 +376,9 @@ class PngProcessingTests(unittest.TestCase):
                     dpi=300,
                 )
 
-            optimize.assert_called_once_with(source.resolve(), output.resolve(), executable=None)
+            optimize.assert_called_once_with(
+                source.resolve(), output.resolve(), oxipng_executable=None
+            )
             self.assertFalse(result.resized)
             self.assertTrue(result.compressed)
             self.assertEqual(result.saved_bytes, 400)
@@ -303,7 +407,7 @@ class PngProcessingTests(unittest.TestCase):
                     "transparent_image_layout.resize_transparent_png",
                     side_effect=fake_resize,
                 ) as resize,
-                patch.object(png_optimizer, "optimize_png_lossless") as optimize,
+                patch.object(png_optimizer, "optimize_png_for_pod") as optimize,
             ):
                 result = png_optimizer.process_png_file(
                     source,
@@ -343,9 +447,10 @@ class PngProcessingTests(unittest.TestCase):
                 staging_path: Path,
                 output_path: Path,
                 *,
-                executable: Path | None,
+                oxipng_executable: Path | None,
             ) -> png_optimizer.PngOptimizationResult:
                 calls.append("compress")
+                self.assertIsNone(oxipng_executable)
                 self.assertTrue(staging_path.is_file())
                 shutil.copy2(staging_path, output_path)
                 return png_optimizer.PngOptimizationResult(output_path, 1000, 700)
@@ -357,7 +462,7 @@ class PngProcessingTests(unittest.TestCase):
                 ),
                 patch.object(
                     png_optimizer,
-                    "optimize_png_lossless",
+                    "optimize_png_for_pod",
                     side_effect=fake_optimize,
                 ),
             ):

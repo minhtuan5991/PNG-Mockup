@@ -585,7 +585,9 @@ def verify_installer(
                 "runtime/python/lib/site-packages/pil/__init__.py",
                 "runtime/python/tcl/tcl8.6/init.tcl", "runtime/python/tcl/tk8.6/tk.tcl",
                 "tools/runtime_check.py", "tools/oxipng/oxipng.exe",
-                "runtime/python/license.txt", "tools/oxipng/license", "third_party_notices.md",
+                "tools/libwebp/cwebp.exe", "tools/libwebp/dwebp.exe",
+                "runtime/python/license.txt", "tools/oxipng/license",
+                "tools/libwebp/copying", "tools/libwebp/patents", "third_party_notices.md",
             }
             if not required <= declared:
                 raise UpdateError("Installer is missing a required PNG Mockup component.")

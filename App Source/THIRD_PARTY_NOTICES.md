@@ -9,6 +9,7 @@ copyright and license notices are retained in the files below.
 | Tcl/Tk | 8.6 | `runtime/python/tcl/tk8.6/license.terms` and the Python runtime notices |
 | Pillow and bundled image libraries | 12.3.0 | `runtime/python/Lib/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE` |
 | oxipng | 10.2.0, Windows x64 | `tools/oxipng/LICENSE` |
+| libwebp (`cwebp` and `dwebp`) | 1.6.0, Windows x64 | `tools/libwebp/COPYING` and `tools/libwebp/PATENTS` |
 
 The Pillow notice includes the notices for its bundled image codecs and other
 native dependencies. The Python notice includes notices for components shipped
@@ -16,7 +17,9 @@ with the Python runtime. Keep these files with redistributed copies of the app.
 
 `runtime/python/BUNDLED_RUNTIME.md` describes the private runtime layout.
 `tools/oxipng/README-PNG-MOCKUP.txt` records the bundled oxipng binary hash and
-the existing lossless compression options used by PNG Mockup.
+the lossless fallback options used by PNG Mockup.
+`tools/libwebp/README-PNG-MOCKUP.txt` records the official archive and bundled
+binary hashes for the automatic POD compression workflow.
 
 Adobe Photoshop is an external prerequisite, is not included in this package,
 and is not licensed by PNG Mockup. The PNG Mockup application icon is a separate

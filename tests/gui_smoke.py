@@ -98,7 +98,7 @@ def main() -> int:
         )
         assert (
             str(app.buttons["batch_resize"].cget("text"))
-            == "Chọn ảnh PNG"
+            == "Nén ảnh PNG"
         )
         assert str(app.buttons["png"].cget("style")) == "Bold.TButton"
         assert str(app.buttons["mockup"].cget("style")) == "Bold.TButton"
@@ -112,7 +112,12 @@ def main() -> int:
         for key in ("refresh_top", "reset_top", "run_error_top"):
             assert str(app.buttons[key].cget("style")) == "SoftGreenOutline.TButton"
 
-        from png_optimizer import PngImageInfo, inspect_png
+        from png_optimizer import (
+            POD_PRIMARY_MAX_CHANNEL_DELTA,
+            PngImageInfo,
+            _measure_composited_quality,
+            inspect_png,
+        )
 
         resize_source = root_path / "resize-dialog-source.png"
         Image.new("RGBA", (96, 80), (30, 120, 210, 180)).save(
@@ -166,8 +171,8 @@ def main() -> int:
                     "Nén ảnh PNG",
                 }
                 assert any(
-                    "oxipng lossless" in text
-                    and "giữ nguyên pixel, màu, ICC và DPI" in text
+                    "một chế độ nén tự động" in text
+                    and "alpha, ICC và DPI" in text
                     for text in resize_texts
                 )
 
@@ -179,8 +184,6 @@ def main() -> int:
                         )
                     )
 
-                assert not any(checked(name) for name in resize_checks)
-                resize_checks["Nén ảnh PNG"].invoke()
                 assert checked("Nén ảnh PNG")
                 assert not checked("4500x5400")
                 assert not checked("4200x4800")
@@ -272,7 +275,9 @@ def main() -> int:
                 assert compression_check is not None
                 assert start_button is not None
                 assert close_button is not None
-                compression_check.invoke()
+                assert compression_dialog.tk.getboolean(
+                    compression_dialog.getvar(str(compression_check.cget("variable")))
+                )
                 start_button.invoke()
 
                 def close_when_finished() -> None:
@@ -318,8 +323,15 @@ def main() -> int:
             original.load()
             optimized.load()
             assert original.size == optimized.size
-            assert original.mode == optimized.mode
-            assert original.tobytes() == optimized.tobytes()
+            original_rgba = original.convert("RGBA")
+            optimized_rgba = optimized.convert("RGBA")
+            try:
+                assert _measure_composited_quality(
+                    original_rgba, optimized_rgba
+                ).max_channel_delta <= POD_PRIMARY_MAX_CHANNEL_DELTA
+            finally:
+                original_rgba.close()
+                optimized_rgba.close()
             assert original.info.get("icc_profile") == optimized.info.get("icc_profile")
             assert original.info.get("dpi") == optimized.info.get("dpi")
 

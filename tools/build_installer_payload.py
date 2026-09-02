@@ -58,7 +58,13 @@ def json_bytes(value: object) -> bytes:
 def selected_files() -> list[Path]:
     paths = [APP / name for name in ROOT_FILES]
     paths.extend(APP / "tools" / name for name in TOOL_FILES)
-    for directory in (APP / "src", APP / "assets", APP / "tools" / "oxipng", APP / "runtime" / "python"):
+    for directory in (
+        APP / "src",
+        APP / "assets",
+        APP / "tools" / "oxipng",
+        APP / "tools" / "libwebp",
+        APP / "runtime" / "python",
+    ):
         paths.extend(walk_files(directory))
     unique: dict[str, Path] = {}
     for path in paths:

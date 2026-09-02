@@ -442,7 +442,7 @@ class PngMockupGui:
         body = scroll.body
         body.columnconfigure((0, 1), weight=1, uniform="tools")
         cards = (
-            ("Kích thước & nén PNG", "Đổi kích thước canvas hoặc nén lossless. Bản xử lý được lưu riêng, giữ nguyên ảnh gốc.", "Chọn ảnh PNG", self.open_batch_image_resize, "batch_resize", "resize"),
+            ("Kích thước & nén PNG", "Nén tự động cho in POD, nhắm giảm khoảng 35–40%; vẫn giữ công cụ đổi kích thước cũ. Ảnh gốc luôn được giữ nguyên.", "Nén ảnh PNG", self.open_batch_image_resize, "batch_resize", "resize"),
             ("Metadata & Watermark", "Xóa metadata hoặc thêm watermark cho các ảnh được chọn. Không phụ thuộc cài đặt tự động.", "Chọn ảnh để xử lý", self.open_manual_metadata_cleaner, "batch_metadata_clean", "watermark"),
             ("Đổi tên PNG", "Áp dụng .wh / .bl và .f / .b, xem trước tên mới. Không ghi đè file đã tồn tại.", "Đổi tên PNG", lambda: self.open_file_renamer(load_config().png_dir, "PNG", PNG_IMAGE_EXTS, "png"), "rename_png_tools", "image"),
             ("Đổi tên Mockup", "Chọn màu áo và số mặt .1S / .2S cho phôi PSD. Giữ nguyên phần mở rộng của file.", "Đổi tên Mockup", lambda: self.open_file_renamer(load_config().mockup_dir, "Mockup", MOCKUP_FILE_EXTS, "mockup"), "rename_mockup_tools", "layers"),
@@ -1867,7 +1867,7 @@ class PngMockupGui:
 
         selected_names = filedialog.askopenfilenames(
             parent=self.root,
-            title="Chọn ảnh PNG cần thay đổi kích thước hoặc nén",
+            title="Chọn ảnh để nén PNG",
             initialdir=str(folder),
             filetypes=[("Ảnh PNG", "*.png"), ("Tất cả file", "*.*")],
         )
@@ -1963,7 +1963,7 @@ class PngMockupGui:
 
         layout_4500_var = tk.BooleanVar(value=False)
         layout_4200_var = tk.BooleanVar(value=False)
-        compress_png_var = tk.BooleanVar(value=False)
+        compress_png_var = tk.BooleanVar(value=True)
         list_shell = ttk.Frame(
             main, relief="solid", borderwidth=1, style="Section.TFrame"
         )
@@ -2032,7 +2032,7 @@ class PngMockupGui:
         )
         options.pack(fill="x", pady=(0, 12))
         output_folder_var = tk.StringVar(
-            value="Chọn ít nhất một kích thước hoặc Nén ảnh PNG."
+            value=f"Output: {folder / 'Done Nén PNG'} (nén tự động POD)"
         )
 
         def selected_layout() -> str | None:
@@ -2046,10 +2046,10 @@ class PngMockupGui:
             layout = selected_layout()
             compress = bool(compress_png_var.get())
             if layout:
-                suffix = " (resize + nén lossless)" if compress else " (chỉ resize)"
+                suffix = " (resize + nén tự động POD)" if compress else " (chỉ resize)"
                 output_folder_var.set(f"Output: {folder / f'Done {layout}'}{suffix}")
             elif compress:
-                output_folder_var.set(f"Output: {folder / 'Done Nén PNG'} (chỉ nén)")
+                output_folder_var.set(f"Output: {folder / 'Done Nén PNG'} (nén tự động POD)")
             else:
                 output_folder_var.set(
                     "Chọn ít nhất một kích thước hoặc Nén ảnh PNG."
@@ -2083,8 +2083,9 @@ class PngMockupGui:
         ttk.Label(
             options,
             text=(
-                "Hai kích thước loại trừ nhau. Nén dùng oxipng lossless, giữ nguyên "
-                "pixel, màu, ICC và DPI; không dùng giảm màu hoặc quantization."
+                "Chỉ có một chế độ nén tự động: giữ nguyên kích thước, alpha, ICC và DPI; "
+                "giới hạn sai khác màu bằng kiểm tra chất lượng trước khi lưu. Mục tiêu giảm "
+                "khoảng 35–40%; ảnh đã tối ưu sẵn có thể giảm ít hơn để bảo đảm chất lượng in."
             ),
             wraplength=600,
             justify="left",
@@ -2290,15 +2291,25 @@ class PngMockupGui:
             open_done_button.configure(state="normal" if outputs else "disabled")
             start_button.configure(state="normal")
             mode_text = (
-                f"resize {output_layout} + nén lossless"
+                f"resize {output_layout} + nén tự động POD"
                 if output_layout and compress
                 else f"resize {output_layout}"
                 if output_layout
-                else "nén lossless"
+                else "nén tự động POD"
             )
             saved_bytes = sum(item.saved_bytes for item in outputs)
+            compression_input = sum(
+                item.input_bytes_for_compression for item in outputs if item.compressed
+            )
+            saved_percent = (
+                saved_bytes / compression_input * 100 if compression_input else 0.0
+            )
+            target_count = sum(item.target_achieved for item in outputs)
+            fallback_count = sum(
+                item.compression_mode.startswith("lossless") for item in outputs
+            )
             saved_text = (
-                f" Đã giảm {saved_bytes / 1024**2:.2f} MB."
+                f" Đã giảm {saved_bytes / 1024**2:.2f} MB ({saved_percent:.1f}%)."
                 if compress
                 else ""
             )
@@ -2308,7 +2319,13 @@ class PngMockupGui:
             self.write_output(
                 f"\n--- Thay đổi kích thước/Nén ảnh PNG ---\n"
                 f"Đã xử lý: {len(outputs)}/{len(infos)} | Chế độ: {mode_text}"
-                + (f" | Đã giảm: {saved_bytes / 1024**2:.2f} MB" if compress else "")
+                + (
+                    f" | Đã giảm: {saved_bytes / 1024**2:.2f} MB ({saved_percent:.1f}%)"
+                    f" | Đạt mục tiêu ≥35%: {target_count}/{len(outputs)}"
+                    f" | Fallback lossless: {fallback_count}"
+                    if compress
+                    else ""
+                )
                 + f"\nThư mục output: {output_dir}\n"
             )
             if failures:
@@ -2330,7 +2347,14 @@ class PngMockupGui:
                     f"Đã tạo {len(outputs)} file mới trong:\n"
                     f"{output_dir}"
                     + (
-                        f"\n\nDung lượng giảm: {saved_bytes / 1024**2:.2f} MB"
+                        f"\n\nDung lượng giảm: {saved_bytes / 1024**2:.2f} MB "
+                        f"({saved_percent:.1f}%)"
+                        f"\nĐạt mục tiêu ≥35%: {target_count}/{len(outputs)} ảnh"
+                        + (
+                            f"\nFallback lossless để bảo toàn chất lượng: {fallback_count} ảnh"
+                            if fallback_count
+                            else ""
+                        )
                         if compress
                         else ""
                     ),
