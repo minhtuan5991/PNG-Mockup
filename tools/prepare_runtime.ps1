@@ -75,7 +75,7 @@ if ($info.python -notlike '3.12.*' -or -not $info.isolated -or -not $info.x64) {
 $notice = @"
 # Bundled runtime
 
-PNG Mockup includes a private CPython $($info.python) runtime with Tcl/Tk $($info.tk), Pillow $($info.pillow), oxipng, and libwebp command-line tools.
+PNG Mockup includes a private CPython $($info.python) runtime with Tcl/Tk $($info.tk), Pillow $($info.pillow), pngquant, oxipng, and libwebp command-line tools.
 Only the standard library, Tcl/Tk runtime, and Pillow are included; unrelated third-party packages and build caches were omitted.
 Relative python312._pth paths isolate this runtime from machine Python installations and user site packages.
 
@@ -84,6 +84,7 @@ Original license notices are retained at:
 - runtime/python/tcl/tk8.6/license.terms (Tcl/Tk)
 - runtime/python/Lib/site-packages/$($pillowMetadata[0].Name)/licenses/LICENSE (Pillow and bundled image libraries)
 - tools/oxipng/LICENSE
+- tools/pngquant/COPYRIGHT
 - tools/libwebp/COPYING
 - tools/libwebp/PATENTS
 

@@ -62,6 +62,7 @@ def selected_files() -> list[Path]:
         APP / "src",
         APP / "assets",
         APP / "tools" / "oxipng",
+        APP / "tools" / "pngquant",
         APP / "tools" / "libwebp",
         APP / "runtime" / "python",
     ):

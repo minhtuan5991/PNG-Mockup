@@ -47,6 +47,7 @@ def package(*, version=VERSION, repository=REPOSITORY, change_files=None, change
         "runtime/python/tcl/tcl8.6/init.tcl", "runtime/python/tcl/tk8.6/tk.tcl",
         "tools/runtime_check.py", "tools/oxipng/oxipng.exe", "runtime/python/LICENSE.txt",
         "tools/oxipng/LICENSE", "tools/libwebp/cwebp.exe", "tools/libwebp/dwebp.exe",
+        "tools/pngquant/pngquant.exe", "tools/pngquant/COPYRIGHT",
         "tools/libwebp/COPYING", "tools/libwebp/PATENTS", "THIRD_PARTY_NOTICES.md",
     )}
     files["version.json"] = encode({"product_id": "png-mockup", "name": "PNG Mockup", "version": version})

@@ -9,6 +9,7 @@ copyright and license notices are retained in the files below.
 | Tcl/Tk | 8.6 | `runtime/python/tcl/tk8.6/license.terms` and the Python runtime notices |
 | Pillow and bundled image libraries | 12.3.0 | `runtime/python/Lib/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE` |
 | oxipng | 10.2.0, Windows x64 | `tools/oxipng/LICENSE` |
+| pngquant | 2.17.0, Windows x64 | `tools/pngquant/COPYRIGHT` |
 | libwebp (`cwebp` and `dwebp`) | 1.6.0, Windows x64 | `tools/libwebp/COPYING` and `tools/libwebp/PATENTS` |
 
 The Pillow notice includes the notices for its bundled image codecs and other
@@ -18,6 +19,8 @@ with the Python runtime. Keep these files with redistributed copies of the app.
 `runtime/python/BUNDLED_RUNTIME.md` describes the private runtime layout.
 `tools/oxipng/README-PNG-MOCKUP.txt` records the bundled oxipng binary hash and
 the lossless fallback options used by PNG Mockup.
+`tools/pngquant/README-PNG-MOCKUP.txt` records the official pngquant archive,
+binary hash, GPL source location and automatic palette compression settings.
 `tools/libwebp/README-PNG-MOCKUP.txt` records the official archive and bundled
 binary hashes for the automatic POD compression workflow.
 

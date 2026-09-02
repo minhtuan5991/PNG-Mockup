@@ -16,9 +16,10 @@ Tải bộ cài chính thức tại [GitHub Releases](https://github.com/minhtua
 - `App Source/README.md`: hướng dẫn sử dụng đi kèm bộ cài.
 - `verification/`: kết quả kiểm thử và đối chiếu bản đóng gói.
 
-Bộ cài kèm Python/Tk, Pillow, oxipng và libwebp riêng. Không cần cài sẵn Python,
-app cũ, trình duyệt hoặc các model AI. Máy đích vẫn cần Adobe Photoshop có
-Automation/COM hoạt động. Không có bản quyền hoặc bộ cài Photoshop đi kèm.
+Bộ cài kèm Python/Tk, Pillow, pngquant, oxipng và libwebp riêng. Không cần cài
+sẵn Python, app cũ, trình duyệt hoặc các model AI. Máy đích vẫn cần Adobe
+Photoshop có Automation/COM hoạt động. Không có bản quyền hoặc bộ cài Photoshop
+đi kèm.
 
 ## Cấu trúc phát triển
 
@@ -49,6 +50,12 @@ Windows; chỉ giữ ba thư mục `PNG`, `Mockup`, `Output` cùng nội dung b�
 Từ 1.1.4, nút **Nén ảnh PNG** dùng một luồng tự động cho in POD. App nhắm giảm
 khoảng 35–40%, giữ kích thước, alpha, ICC/DPI và chỉ nhận kết quả qua cổng kiểm
 tra chất lượng; ảnh không thể đạt mục tiêu sẽ dùng kết quả an toàn hơn.
+
+Từ 1.1.5, luồng nén chính dùng palette thích ứng tối đa 256 màu với alpha và
+oxipng. Ảnh mẫu 4200×4800 giảm từ 12.005.218 xuống 3.670.636 byte (69,42%), nhỏ
+hơn kết quả iLoveIMG 4.157.821 byte trong khi PSNR đo trên nền trắng cao hơn.
+Ảnh không phù hợp palette tự quay về near-lossless/lossless; giao diện vẫn chỉ
+có một lựa chọn **Nén ảnh PNG**.
 
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.

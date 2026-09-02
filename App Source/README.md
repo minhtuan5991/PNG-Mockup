@@ -1,7 +1,8 @@
-# PNG Mockup 1.1.4
+# PNG Mockup 1.1.5
 
-Tiện ích **Nén ảnh PNG** dùng một luồng tự động cho POD, nhắm giảm khoảng
-35–40% mà không tạo thêm preset cho người dùng. Ảnh gốc luôn được giữ nguyên.
+Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
+luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
+tối ưu lossless lần cuối. Ảnh gốc luôn được giữ nguyên.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 
@@ -16,9 +17,9 @@ Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng
 4. Máy cần Adobe Photoshop có Automation/COM hoạt động. Mở Photoshop một lần,
    hoàn tất khởi tạo/bản quyền nếu có, rồi dùng **Kiểm tra hệ thống** trong tool.
 
-Bộ cài chứa Python, Tk, Pillow, oxipng và libwebp; không cần mạng để cài những
-thành phần này, không cần app cũ hoặc Python cài sẵn. Photoshop không nằm trong
-bộ cài.
+Bộ cài chứa Python, Tk, Pillow, pngquant, oxipng và libwebp; không cần mạng để
+cài những thành phần này, không cần app cũ hoặc Python cài sẵn. Photoshop không
+nằm trong bộ cài.
 
 ## Bắt đầu
 
@@ -60,16 +61,18 @@ Không chạy nhiều lượt tự động hóa PSD cùng lúc trên cùng một
 
 Giữ các tiện ích đổi tên PNG/Mockup, thay đổi kích thước/nén PNG, xóa metadata và
 gắn watermark thủ công. Nút chọn của tiện ích nén có tên **Nén ảnh PNG**. Chế độ
-nén được bật sẵn và tự dùng near-lossless có cổng kiểm tra chất lượng, không có
-thanh chất lượng hoặc nhiều preset. Công cụ giữ nguyên kích thước, alpha, ICC và
-DPI; màu sau khi ghép trên nền in phải đạt PSNR tối thiểu 48 dB và sai khác từng
-kênh được giới hạn. Metadata văn bản không ảnh hưởng in có thể được loại bỏ.
+nén được bật sẵn và tự dùng palette thích ứng có cổng kiểm tra chất lượng, không
+có thanh chất lượng hoặc nhiều preset. Công cụ giữ nguyên kích thước, ICC và DPI;
+palette có thể giảm số màu và mức alpha để đổi lấy dung lượng nhỏ hơn, tương tự
+nhóm dịch vụ nén PNG trực tuyến. Metadata văn bản không ảnh hưởng in có thể được
+loại bỏ.
 
-Mục tiêu thông thường là giảm ít nhất 35%, gần khoảng 35–40%. Tỷ lệ thực tế phụ
-thuộc nội dung và mức tối ưu của ảnh nguồn. Nếu ảnh không thể đạt mục tiêu trong
-ngưỡng chất lượng, app tự dùng kết quả an toàn hơn hoặc fallback lossless thay vì
-ép giảm dung lượng. Nhật ký hoàn tất hiển thị tỷ lệ thực tế, số ảnh đạt mục tiêu
-và số ảnh phải fallback. Resize cũ vẫn có thể dùng riêng hoặc kết hợp với nén.
+Mục tiêu tối thiểu vẫn là giảm 35%; ảnh RGBA nhiều màu phù hợp thường có thể giảm
+60–70%, nhưng tỷ lệ thực tế phụ thuộc nội dung và mức tối ưu của ảnh nguồn. Nếu
+palette không đạt cổng chất lượng, app tự dùng near-lossless an toàn hơn hoặc
+fallback lossless thay vì ép giảm dung lượng. Nhật ký hoàn tất hiển thị tỷ lệ
+thực tế, số ảnh đạt mục tiêu và số ảnh phải fallback. Resize cũ vẫn có thể dùng
+riêng hoặc kết hợp với nén.
 
 Tiện ích resize/nén không phải luồng xóa nền. Tiện ích thủ công tạo bản kết quả
 riêng, giữ ảnh nguồn và xử lý tên trùng theo quy tắc cũ.

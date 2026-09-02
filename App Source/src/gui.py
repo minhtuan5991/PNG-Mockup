@@ -442,7 +442,7 @@ class PngMockupGui:
         body = scroll.body
         body.columnconfigure((0, 1), weight=1, uniform="tools")
         cards = (
-            ("Kích thước & nén PNG", "Nén tự động cho in POD, nhắm giảm khoảng 35–40%; vẫn giữ công cụ đổi kích thước cũ. Ảnh gốc luôn được giữ nguyên.", "Nén ảnh PNG", self.open_batch_image_resize, "batch_resize", "resize"),
+            ("Kích thước & nén PNG", "Nén palette tự động cho in POD, thường giảm mạnh hơn với ảnh RGBA; vẫn giữ công cụ đổi kích thước cũ. Ảnh gốc luôn được giữ nguyên.", "Nén ảnh PNG", self.open_batch_image_resize, "batch_resize", "resize"),
             ("Metadata & Watermark", "Xóa metadata hoặc thêm watermark cho các ảnh được chọn. Không phụ thuộc cài đặt tự động.", "Chọn ảnh để xử lý", self.open_manual_metadata_cleaner, "batch_metadata_clean", "watermark"),
             ("Đổi tên PNG", "Áp dụng .wh / .bl và .f / .b, xem trước tên mới. Không ghi đè file đã tồn tại.", "Đổi tên PNG", lambda: self.open_file_renamer(load_config().png_dir, "PNG", PNG_IMAGE_EXTS, "png"), "rename_png_tools", "image"),
             ("Đổi tên Mockup", "Chọn màu áo và số mặt .1S / .2S cho phôi PSD. Giữ nguyên phần mở rộng của file.", "Đổi tên Mockup", lambda: self.open_file_renamer(load_config().mockup_dir, "Mockup", MOCKUP_FILE_EXTS, "mockup"), "rename_mockup_tools", "layers"),
@@ -2083,9 +2083,9 @@ class PngMockupGui:
         ttk.Label(
             options,
             text=(
-                "Chỉ có một chế độ nén tự động: giữ nguyên kích thước, alpha, ICC và DPI; "
-                "giới hạn sai khác màu bằng kiểm tra chất lượng trước khi lưu. Mục tiêu giảm "
-                "khoảng 35–40%; ảnh đã tối ưu sẵn có thể giảm ít hơn để bảo đảm chất lượng in."
+                "Chỉ có một chế độ nén tự động: giữ nguyên kích thước, ICC và DPI; "
+                "lượng tử hóa màu/alpha có kiểm tra chất lượng trước khi lưu. Mục tiêu giảm "
+                "ít nhất 35% và thường 60–70% với ảnh phù hợp; ảnh đã tối ưu sẵn có thể giảm ít hơn để bảo đảm chất lượng in."
             ),
             wraplength=600,
             justify="left",

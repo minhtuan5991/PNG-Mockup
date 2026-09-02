@@ -170,6 +170,30 @@ class PngOptimizationTests(unittest.TestCase):
         self.assertTrue((png_optimizer.DEFAULT_CWEBP_PATH.parent / "COPYING").is_file())
         self.assertTrue((png_optimizer.DEFAULT_CWEBP_PATH.parent / "PATENTS").is_file())
 
+    def test_bundled_pngquant_is_pinned_official_version_with_gpl_notice(self) -> None:
+        executable = png_optimizer.DEFAULT_PNGQUANT_PATH
+        self.assertTrue(executable.is_file())
+        self.assertEqual(
+            hashlib.sha256(executable.read_bytes()).hexdigest(),
+            "7aadad6a50aa5c40cfcb20f9478c92f6030360a3424bc262ce383dc1e97fb86a",
+        )
+        self.assertTrue((executable.parent / "COPYRIGHT").is_file())
+        notice = (executable.parent / "README-PNG-MOCKUP.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("https://github.com/kornelski/pngquant/tree/2.17.0", notice)
+        result = subprocess.run(
+            [str(executable), "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(png_optimizer.PNGQUANT_VERSION, result.stdout)
+
     def test_real_pod_compression_hits_target_and_preserves_print_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -181,22 +205,19 @@ class PngOptimizationTests(unittest.TestCase):
             result = png_optimizer.optimize_png_for_pod(source, output)
 
             self.assertEqual(source.read_bytes(), source_bytes)
-            self.assertTrue(result.compression_mode.startswith("pod-near-lossless-"))
+            self.assertEqual(result.compression_mode, "pod-palette-256")
             self.assertTrue(result.target_achieved)
             self.assertGreaterEqual(result.saved_fraction, png_optimizer.POD_TARGET_SAVINGS)
-            self.assertGreaterEqual(result.psnr_db, png_optimizer.POD_MIN_PSNR_DB)
+            self.assertGreaterEqual(result.psnr_db, png_optimizer.POD_PALETTE_MIN_PSNR_DB)
             self.assertLessEqual(
                 result.max_channel_delta,
-                png_optimizer.POD_PRIMARY_MAX_CHANNEL_DELTA,
+                png_optimizer.POD_PALETTE_MAX_CHANNEL_DELTA,
             )
             with Image.open(source) as original, Image.open(output) as optimized:
                 original.load()
                 optimized.load()
                 self.assertEqual(original.size, optimized.size)
-                self.assertEqual(
-                    original.convert("RGBA").getchannel("A").tobytes(),
-                    optimized.convert("RGBA").getchannel("A").tobytes(),
-                )
+                self.assertEqual(optimized.mode, "P")
                 self.assertEqual(
                     original.info.get("icc_profile"), optimized.info.get("icc_profile")
                 )

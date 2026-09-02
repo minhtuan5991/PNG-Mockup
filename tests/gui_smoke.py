@@ -113,7 +113,7 @@ def main() -> int:
             assert str(app.buttons[key].cget("style")) == "SoftGreenOutline.TButton"
 
         from png_optimizer import (
-            POD_PRIMARY_MAX_CHANNEL_DELTA,
+            POD_PALETTE_MAX_CHANNEL_DELTA,
             PngImageInfo,
             _measure_composited_quality,
             inspect_png,
@@ -172,7 +172,8 @@ def main() -> int:
                 }
                 assert any(
                     "một chế độ nén tự động" in text
-                    and "alpha, ICC và DPI" in text
+                    and "ICC và DPI" in text
+                    and "lượng tử hóa màu/alpha" in text
                     for text in resize_texts
                 )
 
@@ -328,7 +329,7 @@ def main() -> int:
             try:
                 assert _measure_composited_quality(
                     original_rgba, optimized_rgba
-                ).max_channel_delta <= POD_PRIMARY_MAX_CHANNEL_DELTA
+                ).max_channel_delta <= POD_PALETTE_MAX_CHANNEL_DELTA
             finally:
                 original_rgba.close()
                 optimized_rgba.close()

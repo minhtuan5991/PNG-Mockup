@@ -22,7 +22,15 @@ DEFAULT_OXIPNG_PATH = APP_ROOT / "tools" / "oxipng" / "oxipng.exe"
 LIBWEBP_VERSION = "1.6.0"
 DEFAULT_CWEBP_PATH = APP_ROOT / "tools" / "libwebp" / "cwebp.exe"
 DEFAULT_DWEBP_PATH = APP_ROOT / "tools" / "libwebp" / "dwebp.exe"
+PNGQUANT_VERSION = "2.17.0"
+DEFAULT_PNGQUANT_PATH = APP_ROOT / "tools" / "pngquant" / "pngquant.exe"
 POD_TARGET_SAVINGS = 0.35
+POD_PALETTE_COLORS = 256
+POD_PALETTE_MIN_QUALITY = 80
+POD_PALETTE_MAX_QUALITY = 95
+POD_PALETTE_SPEED = 4
+POD_PALETTE_MIN_PSNR_DB = 37.0
+POD_PALETTE_MAX_CHANNEL_DELTA = 100
 POD_PRIMARY_NEAR_LOSSLESS = 50
 POD_SECONDARY_NEAR_LOSSLESS = 30
 POD_RECOVERY_NEAR_LOSSLESS = 70
@@ -283,21 +291,25 @@ def optimize_png_for_pod(
     *,
     cwebp_executable: Path | None = None,
     dwebp_executable: Path | None = None,
+    pngquant_executable: Path | None = None,
     oxipng_executable: Path | None = None,
     timeout_sec: int = OXIPNG_TIMEOUT_SEC,
 ) -> PngOptimizationResult:
     """Compress one PNG with a quality-gated, automatic POD workflow.
 
-    The user does not choose a preset. The fast primary pass targets the normal
-    35% saving threshold. A stronger pass is attempted only when the primary
-    pass is safe but misses the target. Alpha is restored exactly and print
-    rendering chunks are copied from the source before final PNG optimization.
+    The user does not choose a preset. The primary pass creates an efficient
+    8-bit PNG palette with adaptive dithering, matching the kind of output used
+    by high-ratio online PNG compressors. A quality gate protects visible POD
+    rendering, and ICC/DPI/color chunks are copied from the source. The older
+    near-lossless path remains an automatic fallback when palette conversion is
+    unsuitable; there is still only one user-visible compression workflow.
     """
 
     source = source_path.resolve()
     output = output_path.resolve()
     cwebp = (cwebp_executable or DEFAULT_CWEBP_PATH).resolve()
     dwebp = (dwebp_executable or DEFAULT_DWEBP_PATH).resolve()
+    pngquant = (pngquant_executable or DEFAULT_PNGQUANT_PATH).resolve()
     oxipng = (oxipng_executable or DEFAULT_OXIPNG_PATH).resolve()
 
     info = inspect_png(source)
@@ -324,18 +336,6 @@ def optimize_png_for_pod(
             target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
         )
 
-    missing = [path for path in (cwebp, dwebp) if not path.is_file()]
-    if missing:
-        fallback = optimize_png_lossless(
-            source, output, executable=oxipng, timeout_sec=timeout_sec
-        )
-        return PngOptimizationResult(
-            output_path=fallback.output_path,
-            input_bytes=fallback.input_bytes,
-            output_bytes=fallback.output_bytes,
-            compression_mode="lossless-tool-fallback",
-            target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
-        )
     if not oxipng.is_file():
         raise FileNotFoundError(
             "Không tìm thấy oxipng đi kèm ứng dụng. Hãy cài lại hoặc cập nhật "
@@ -347,6 +347,48 @@ def optimize_png_for_pod(
     candidates: list[_PngCandidate] = []
     selected: _PngCandidate | None = None
     try:
+        if pngquant.is_file():
+            try:
+                palette = _build_palette_candidate(
+                    source,
+                    output,
+                    pngquant=pngquant,
+                    oxipng=oxipng,
+                    timeout_sec=timeout_sec,
+                )
+                candidates.append(palette)
+                if palette.output_bytes < input_bytes:
+                    if output.exists():
+                        raise FileExistsError(f"Output đã tồn tại: {output}")
+                    palette.path.rename(output)
+                    saved_fraction = max(
+                        0.0, 1.0 - output.stat().st_size / input_bytes
+                    )
+                    return PngOptimizationResult(
+                        output_path=output,
+                        input_bytes=input_bytes,
+                        output_bytes=output.stat().st_size,
+                        compression_mode=f"pod-palette-{POD_PALETTE_COLORS}",
+                        target_achieved=saved_fraction >= POD_TARGET_SAVINGS,
+                        psnr_db=palette.metrics.psnr_db,
+                        max_channel_delta=palette.metrics.max_channel_delta,
+                    )
+            except (OSError, RuntimeError, ValueError):
+                pass
+
+        missing = [path for path in (cwebp, dwebp) if not path.is_file()]
+        if missing:
+            fallback = optimize_png_lossless(
+                source, output, executable=oxipng, timeout_sec=timeout_sec
+            )
+            return PngOptimizationResult(
+                output_path=fallback.output_path,
+                input_bytes=fallback.input_bytes,
+                output_bytes=fallback.output_bytes,
+                compression_mode="lossless-tool-fallback",
+                target_achieved=fallback.saved_fraction >= POD_TARGET_SAVINGS,
+            )
+
         try:
             primary = _build_near_lossless_candidate(
                 source,
@@ -427,6 +469,87 @@ def optimize_png_for_pod(
     finally:
         for candidate in candidates:
             candidate.path.unlink(missing_ok=True)
+
+
+def _build_palette_candidate(
+    source: Path,
+    output: Path,
+    *,
+    pngquant: Path,
+    oxipng: Path,
+    timeout_sec: int,
+) -> _PngCandidate:
+    token = uuid.uuid4().hex
+    prefix = output.with_name(f".{output.stem}.{token}.palette")
+    quantized_path = prefix.with_suffix(".quantized.tmp.png")
+    metadata_path = prefix.with_suffix(".metadata.tmp.png")
+    optimized_path = prefix.with_suffix(".optimized.tmp.png")
+    success = False
+    try:
+        _run_image_tool(
+            [
+                str(pngquant),
+                "--quality",
+                f"{POD_PALETTE_MIN_QUALITY}-{POD_PALETTE_MAX_QUALITY}",
+                "--speed",
+                str(POD_PALETTE_SPEED),
+                str(POD_PALETTE_COLORS),
+                "--force",
+                "--output",
+                str(quantized_path),
+                "--",
+                str(source),
+            ],
+            executable=pngquant,
+            timeout_sec=timeout_sec,
+            source_name=source.name,
+        )
+        if not quantized_path.is_file():
+            raise RuntimeError(f"pngquant không tạo output cho {source.name}.")
+
+        _copy_print_chunks(source, quantized_path, metadata_path)
+        _run_image_tool(
+            [
+                str(oxipng),
+                "-o",
+                "2",
+                "--alpha",
+                "--quiet",
+                "--threads",
+                str(OXIPNG_THREADS),
+                "--out",
+                str(optimized_path),
+                str(metadata_path),
+            ],
+            executable=oxipng,
+            timeout_sec=timeout_sec,
+            source_name=source.name,
+        )
+        if not optimized_path.is_file():
+            raise RuntimeError(f"oxipng không tạo output cho {source.name}.")
+
+        metrics = _validate_pod_candidate(source, optimized_path)
+        if (
+            metrics.psnr_db < POD_PALETTE_MIN_PSNR_DB
+            or metrics.max_channel_delta > POD_PALETTE_MAX_CHANNEL_DELTA
+        ):
+            raise ValueError(
+                "Kết quả palette không đạt cổng chất lượng in POD "
+                f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
+                f"{metrics.max_channel_delta})."
+            )
+        success = True
+        return _PngCandidate(
+            path=optimized_path,
+            quality=POD_PALETTE_COLORS,
+            metrics=metrics,
+            output_bytes=optimized_path.stat().st_size,
+        )
+    finally:
+        quantized_path.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        if not success:
+            optimized_path.unlink(missing_ok=True)
 
 
 def _build_near_lossless_candidate(
@@ -675,11 +798,14 @@ def _copy_print_chunks(source_path: Path, png_path: Path, output_path: Path) -> 
         if chunk_type in PRINT_CHUNKS
     ]
     decoded_chunks = _read_raw_png_chunks(png_path)
+    structural_chunks = {b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND"}
     with output_path.open("xb") as stream:
         stream.write(PNG_SIGNATURE)
         inserted = False
         for chunk_type, data in decoded_chunks:
             if chunk_type in PRINT_CHUNKS:
+                continue
+            if chunk_type not in structural_chunks:
                 continue
             _write_png_chunk(stream, chunk_type, data)
             if chunk_type == b"IHDR" and not inserted:
