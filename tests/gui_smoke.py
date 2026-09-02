@@ -98,8 +98,20 @@ def main() -> int:
         )
         assert (
             str(app.buttons["batch_resize"].cget("text"))
-            == "Nén ảnh PNG"
+            == "Chọn ảnh để xử lý"
         )
+        pending_widgets = [window]
+        visible_texts: set[str] = set()
+        while pending_widgets:
+            widget = pending_widgets.pop()
+            pending_widgets.extend(widget.winfo_children())
+            try:
+                text = str(widget.cget("text"))
+            except tk.TclError:
+                continue
+            if text:
+                visible_texts.add(text)
+        assert "Thay đổi kích thước và Giảm dung lượng file PNG cho POD" in visible_texts
         assert str(app.buttons["png"].cget("style")) == "Bold.TButton"
         assert str(app.buttons["mockup"].cget("style")) == "Bold.TButton"
         assert str(app.buttons["rename_png"].cget("text")) == "Đổi Tên"

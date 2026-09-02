@@ -57,6 +57,10 @@ hơn kết quả iLoveIMG 4.157.821 byte trong khi PSNR đo trên nền trắng 
 Ảnh không phù hợp palette tự quay về near-lossless/lossless; giao diện vẫn chỉ
 có một lựa chọn **Nén ảnh PNG**.
 
+Từ 1.1.6, thẻ **Kích thước & nén PNG** dùng nút **Chọn ảnh để xử lý** và mô tả
+**Thay đổi kích thước và Giảm dung lượng file PNG cho POD**. Logic xử lý và các
+cài đặt khác không thay đổi.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.

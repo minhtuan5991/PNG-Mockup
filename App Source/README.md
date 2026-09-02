@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.5
+# PNG Mockup 1.1.6
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -60,9 +60,10 @@ Không chạy nhiều lượt tự động hóa PSD cùng lúc trên cùng một
 ## Công cụ ảnh
 
 Giữ các tiện ích đổi tên PNG/Mockup, thay đổi kích thước/nén PNG, xóa metadata và
-gắn watermark thủ công. Nút chọn của tiện ích nén có tên **Nén ảnh PNG**. Chế độ
-nén được bật sẵn và tự dùng palette thích ứng có cổng kiểm tra chất lượng, không
-có thanh chất lượng hoặc nhiều preset. Công cụ giữ nguyên kích thước, ICC và DPI;
+gắn watermark thủ công. Nút mở tiện ích có tên **Chọn ảnh để xử lý**; tùy chọn
+bên trong vẫn là **Nén ảnh PNG**. Chế độ nén được bật sẵn và tự dùng palette thích
+ứng có cổng kiểm tra chất lượng, không có thanh chất lượng hoặc nhiều preset.
+Công cụ giữ nguyên kích thước, ICC và DPI;
 palette có thể giảm số màu và mức alpha để đổi lấy dung lượng nhỏ hơn, tương tự
 nhóm dịch vụ nén PNG trực tuyến. Metadata văn bản không ảnh hưởng in có thể được
 loại bỏ.
