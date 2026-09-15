@@ -11,6 +11,10 @@ from PIL import Image, ImageOps
 SMALL_IMAGE_LONG_EDGE_PX = 2500
 BASE_CANVAS_SIZE_PX = 4000
 OUTPUT_DPI = 300
+# PNG encoding stays lossless at every compression level. Level 3 avoids the
+# expensive exhaustive encoder search that dominated resize time while keeping
+# every rendered pixel, alpha value, ICC profile and DPI unchanged.
+RESIZE_PNG_COMPRESS_LEVEL = 3
 LAYOUT_SPECS = {
     "4500x5400": (4500, 5400, 4450, 5350),
     "4200x4800": (4200, 4800, 4150, 4750),
@@ -92,13 +96,42 @@ def resize_transparent_png(
     output_layout: str,
     dpi: int = OUTPUT_DPI,
 ) -> Path:
-    inspect_transparent_png(source_path)
+    source_path = source_path.resolve()
+    if source_path.suffix.casefold() != ".png":
+        raise ValueError(f"Chỉ hỗ trợ file PNG: {source_path.name}")
+    if not source_path.is_file():
+        raise FileNotFoundError(f"Không tìm thấy file: {source_path}")
     if output_layout not in LAYOUT_SPECS:
         raise ValueError(f"Kích thước output không hợp lệ: {output_layout}")
 
-    with Image.open(source_path) as source:
-        rgba = source.convert("RGBA")
-        icc_profile = source.info.get("icc_profile")
+    try:
+        with Image.open(source_path) as source:
+            if str(source.format or "").casefold() != "png":
+                raise ValueError(f"File không phải PNG hợp lệ: {source_path.name}")
+            rgba = source.convert("RGBA")
+            icc_profile = source.info.get("icc_profile")
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Không đọc được PNG {source_path.name}: {exc}") from exc
+
+    alpha = rgba.getchannel("A")
+    try:
+        extrema = alpha.getextrema()
+        clean_alpha = alpha.point(lambda value: 0 if value < 2 else value)
+        try:
+            bounds = clean_alpha.getbbox()
+        finally:
+            clean_alpha.close()
+    finally:
+        alpha.close()
+    if extrema == (255, 255):
+        rgba.close()
+        raise ValueError(f"PNG không có nền trong suốt: {source_path.name}")
+    if extrema == (0, 0) or bounds is None:
+        rgba.close()
+        raise ValueError(
+            f"PNG hoàn toàn trong suốt, không có nội dung: {source_path.name}"
+        )
+
     temporary = output_path.with_name(
         f".{output_path.stem}.{uuid.uuid4().hex}.tmp"
     )
@@ -210,7 +243,7 @@ def save_rgba_layout(
         save_options: dict[str, Any] = {
             "format": "PNG",
             "dpi": (dpi, dpi),
-            "optimize": True,
+            "compress_level": RESIZE_PNG_COMPRESS_LEVEL,
         }
         if icc_profile:
             save_options["icc_profile"] = icc_profile

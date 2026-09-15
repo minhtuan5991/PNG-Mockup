@@ -61,6 +61,11 @@ Từ 1.1.6, thẻ **Kích thước & nén PNG** dùng nút **Chọn ảnh để 
 **Thay đổi kích thước và Nén dung lượng PNG phù hợp cho POD**. Logic xử lý và các
 cài đặt khác không thay đổi.
 
+Từ 1.1.7, tác vụ thay đổi kích thước bỏ một lần giải mã PNG dư thừa và dùng bộ
+mã hóa PNG lossless nhanh hơn. Phép đo trên ảnh POD mẫu 4200×4800 giảm thời gian
+resize từ khoảng 16,3 xuống 3,15 giây; pixel, alpha, Lanczos, ICC và 300 DPI giữ
+nguyên như phiên bản trước.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.

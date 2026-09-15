@@ -1,8 +1,12 @@
-# PNG Mockup 1.1.6
+# PNG Mockup 1.1.7
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
 tối ưu lossless lần cuối. Ảnh gốc luôn được giữ nguyên.
+
+Từ 1.1.7, thao tác thay đổi kích thước giải mã mỗi ảnh một lần và ghi PNG bằng
+chế độ lossless nhanh hơn. Thuật toán Lanczos, kích thước, vị trí, alpha, ICC và
+300 DPI vẫn giữ nguyên như trước.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 
