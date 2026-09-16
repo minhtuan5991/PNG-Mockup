@@ -1073,12 +1073,80 @@ class PngMockupGui:
         self._refresh_update_controls()
 
     def open_path(self, path: Path) -> None:
+        target = Path(path)
+        worker_events: queue.Queue[tuple[str, str]] = queue.Queue()
+
+        def worker() -> None:
+            try:
+                # File-system and ShellExecute calls can block while Explorer is
+                # waking up, a drive is busy, or antivirus is inspecting the
+                # folder. Keep them off Tk's event thread so the app responds
+                # immediately to local-folder buttons.
+                target.mkdir(parents=True, exist_ok=True)
+                os.startfile(str(target))
+            except Exception as exc:
+                worker_events.put(("error", str(exc)))
+            finally:
+                worker_events.put(("done", ""))
+
+        def poll_worker() -> None:
+            finished = False
+            while True:
+                try:
+                    event_name, detail = worker_events.get_nowait()
+                except queue.Empty:
+                    break
+                if event_name == "error":
+                    messagebox.showerror(
+                        "Không mở được thư mục", detail, parent=self.root
+                    )
+                elif event_name == "done":
+                    finished = True
+            if not finished:
+                self.root.after(40, poll_worker)
+
         try:
-            if not path.exists():
-                path.mkdir(parents=True, exist_ok=True)
-            os.startfile(path)
-        except Exception as exc:
+            threading.Thread(target=worker, daemon=True).start()
+        except (RuntimeError, OSError) as exc:
             messagebox.showerror("Không mở được thư mục", str(exc), parent=self.root)
+            return
+        self.root.after(40, poll_worker)
+
+    def _fit_task_dialog(
+        self,
+        dialog: tk.Toplevel,
+        *,
+        preferred_width: int,
+        preferred_height: int,
+        minimum_width: int,
+        minimum_height: int,
+    ) -> None:
+        """Size and center a task dialog without pushing its footer off-screen."""
+
+        dialog.update_idletasks()
+        available_width = max(640, dialog.winfo_screenwidth() - 48)
+        available_height = max(520, dialog.winfo_screenheight() - 96)
+        width = min(
+            available_width,
+            max(preferred_width, dialog.winfo_reqwidth()),
+        )
+        height = min(
+            available_height,
+            max(preferred_height, dialog.winfo_reqheight()),
+        )
+        dialog.minsize(
+            min(minimum_width, width),
+            min(minimum_height, height),
+        )
+
+        self.root.update_idletasks()
+        root_width = max(1, self.root.winfo_width())
+        root_height = max(1, self.root.winfo_height())
+        x = self.root.winfo_rootx() + max(0, (root_width - width) // 2)
+        y = self.root.winfo_rooty() + max(0, (root_height - height) // 2)
+        x = max(12, min(x, dialog.winfo_screenwidth() - width - 12))
+        y = max(12, min(y, dialog.winfo_screenheight() - height - 44))
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def load_log_tail(self) -> None:
         try:
@@ -1495,12 +1563,14 @@ class PngMockupGui:
         dialog.title(f"Đổi tên file - {folder_label}")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("980x720")
-        dialog.minsize(760, 600)
         dialog.configure(background=self.theme.bg)
 
-        main = ttk.Frame(dialog, padding=16, style="App.TFrame")
-        main.pack(fill="both", expand=True)
+        shell = ttk.Frame(dialog, style="App.TFrame")
+        shell.pack(fill="both", expand=True)
+        buttons = ttk.Frame(shell, padding=(16, 4, 16, 16), style="App.TFrame")
+        buttons.pack(side="bottom", fill="x")
+        main = ttk.Frame(shell, padding=(16, 16, 16, 8), style="App.TFrame")
+        main.pack(side="top", fill="both", expand=True)
         ttk.Label(
             main,
             text=f"Đổi tên ảnh trong {folder_label}",
@@ -1767,8 +1837,6 @@ class PngMockupGui:
             style="SectionMuted.TLabel",
         ).pack(fill="x", pady=(10, 8))
 
-        buttons = ttk.Frame(main)
-        buttons.pack(fill="x", pady=(4, 0))
         renamed_any = False
 
         def rename_selected() -> None:
@@ -1844,6 +1912,13 @@ class PngMockupGui:
 
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
         dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        self._fit_task_dialog(
+            dialog,
+            preferred_width=1000,
+            preferred_height=820,
+            minimum_width=760,
+            minimum_height=620,
+        )
         dialog.wait_window()
         if renamed_any:
             self.refresh_status()
@@ -1939,12 +2014,14 @@ class PngMockupGui:
         dialog.title("Thay đổi kích thước/Nén ảnh PNG")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("700x620")
-        dialog.minsize(620, 500)
         dialog.configure(background=self.theme.bg)
 
-        main = ttk.Frame(dialog, padding=16, style="App.TFrame")
-        main.pack(fill="both", expand=True)
+        shell = ttk.Frame(dialog, style="App.TFrame")
+        shell.pack(fill="both", expand=True)
+        buttons = ttk.Frame(shell, padding=(16, 4, 16, 16), style="App.TFrame")
+        buttons.pack(side="bottom", fill="x")
+        main = ttk.Frame(shell, padding=(16, 16, 16, 8), style="App.TFrame")
+        main.pack(side="top", fill="both", expand=True)
         ttk.Label(
             main,
             text="Thay đổi kích thước/Nén ảnh PNG",
@@ -2115,9 +2192,6 @@ class PngMockupGui:
             main, variable=progress_var, maximum=len(infos), mode="determinate"
         )
         progress.pack(fill="x", pady=(0, 10))
-
-        buttons = ttk.Frame(main, style="App.TFrame")
-        buttons.pack(fill="x")
 
         def close_resize_dialog() -> None:
             if self.maintenance_running:
@@ -2371,6 +2445,13 @@ class PngMockupGui:
 
         dialog.bind("<Escape>", lambda _event: close_resize_dialog())
         dialog.protocol("WM_DELETE_WINDOW", close_resize_dialog)
+        self._fit_task_dialog(
+            dialog,
+            preferred_width=960,
+            preferred_height=840,
+            minimum_width=700,
+            minimum_height=620,
+        )
         dialog.wait_window()
 
 
@@ -2463,12 +2544,14 @@ class PngMockupGui:
         dialog.title("Xóa Metadata/Thêm Watermark")
         dialog.transient(self.root)
         dialog.grab_set()
-        dialog.geometry("720x470")
-        dialog.minsize(640, 420)
         dialog.configure(background=self.theme.bg)
 
-        main = ttk.Frame(dialog, padding=14, style="App.TFrame")
-        main.pack(fill="both", expand=True)
+        shell = ttk.Frame(dialog, style="App.TFrame")
+        shell.pack(fill="both", expand=True)
+        buttons = ttk.Frame(shell, padding=(14, 4, 14, 14), style="App.TFrame")
+        buttons.pack(side="bottom", fill="x")
+        main = ttk.Frame(shell, padding=(14, 14, 14, 8), style="App.TFrame")
+        main.pack(side="top", fill="both", expand=True)
         ttk.Label(
             main,
             text=f"Đã chọn {len(selected_paths)} ảnh trong: {folder}",
@@ -2559,8 +2642,6 @@ class PngMockupGui:
             style="SectionMuted.TLabel",
         ).pack(fill="x", pady=(0, 10))
 
-        buttons = ttk.Frame(main, style="App.TFrame")
-        buttons.pack(fill="x", side="bottom")
         output_dir_holder: dict[str, Path | None] = {"path": None}
 
         def update_manual_controls() -> None:
@@ -2864,6 +2945,13 @@ class PngMockupGui:
 
         dialog.bind("<Escape>", lambda _event: close_dialog())
         dialog.protocol("WM_DELETE_WINDOW", close_dialog)
+        self._fit_task_dialog(
+            dialog,
+            preferred_width=840,
+            preferred_height=620,
+            minimum_width=680,
+            minimum_height=500,
+        )
         dialog.wait_window()
 
 

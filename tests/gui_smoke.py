@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import threading
 import time
 import tkinter as tk
 from pathlib import Path
@@ -57,6 +58,24 @@ def main() -> int:
         disabled_channel.start()
         app = PngMockupGui(window)
         window.update_idletasks()
+
+        def assert_dialog_actions_fit(dialog, *buttons) -> None:
+            dialog.update_idletasks()
+            dialog_width, dialog_height = dialog.minsize()
+            for button in buttons:
+                footer = button.master
+                assert footer.master.master is dialog, "Action footer is not dialog-owned"
+                assert footer.winfo_manager() == "pack", "Action footer is not packed"
+                assert footer.pack_info().get("side") == "bottom", (
+                    "Action footer is not reserved at the bottom"
+                )
+                assert footer.winfo_reqwidth() <= dialog_width, (
+                    "Action footer is wider than the initial dialog: "
+                    f"{footer.winfo_reqwidth()} > {dialog_width}"
+                )
+                assert footer.winfo_reqheight() < dialog_height, (
+                    "Action footer is taller than the initial dialog"
+                )
 
         installed_version = json.loads(
             (SOURCE_ROOT / "version.json").read_text(encoding="utf-8")
@@ -214,6 +233,9 @@ def main() -> int:
                 )
                 assert close_resize_button is not None
                 assert start_resize_button is not None
+                assert_dialog_actions_fit(
+                    resize_dialog, close_resize_button, start_resize_button
+                )
                 with (
                     patch(
                         "gui.threading.Thread.start",
@@ -288,6 +310,9 @@ def main() -> int:
                 assert compression_check is not None
                 assert start_button is not None
                 assert close_button is not None
+                assert_dialog_actions_fit(
+                    compression_dialog, start_button, close_button
+                )
                 assert compression_dialog.tk.getboolean(
                     compression_dialog.getvar(str(compression_check.cget("variable")))
                 )
@@ -358,6 +383,18 @@ def main() -> int:
         def control(parent, kind, text):
             return next(widget for widget in all_widgets(parent)
                         if isinstance(widget, kind) and str(widget.cget("text")) == text)
+
+        open_path_target = root_path / "folder-open-speed-test"
+        open_path_called = threading.Event()
+
+        def record_open_path(raw_path: str) -> None:
+            assert Path(raw_path) == open_path_target
+            open_path_called.set()
+
+        with patch("gui.os.startfile", side_effect=record_open_path):
+            app.open_path(open_path_target)
+            assert open_path_called.wait(2), "Folder opening worker did not start promptly"
+        assert open_path_target.is_dir()
 
         assert set(app.nav_buttons) == {"mockup", "tools", "settings"}
         assert not hasattr(app, "source_vars")
@@ -469,10 +506,13 @@ def main() -> int:
                 control(dialog, ttk.Button, "Chọn tất cả").invoke()
                 control(dialog, ttk.Checkbutton, "Áo sáng màu (.bl)").invoke()
                 control(dialog, ttk.Checkbutton, "Mặt trước (.f)").invoke()
-                control(dialog, ttk.Button, "Đổi tên").invoke()
+                rename_button = control(dialog, ttk.Button, "Đổi tên")
+                close_button = control(dialog, ttk.Button, "Đóng")
+                assert_dialog_actions_fit(dialog, rename_button, close_button)
+                rename_button.invoke()
                 assert (rename_folder / "shirt.bl.f.png").is_file()
                 assert not rename_source.exists()
-                control(dialog, ttk.Button, "Đóng").invoke()
+                close_button.invoke()
             except Exception as exc:
                 rename_errors.append(repr(exc))
                 dialog.destroy()
@@ -496,6 +536,7 @@ def main() -> int:
                 assert dialog.state() == "withdrawn"
                 start = control(dialog, ttk.Button, "Bắt đầu xử lý")
                 close = control(dialog, ttk.Button, "Đóng")
+                assert_dialog_actions_fit(dialog, start, close)
                 start.invoke()
                 def finish_when_done():
                     try:

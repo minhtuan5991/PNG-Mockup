@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.7
+# PNG Mockup 1.1.8
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -7,6 +7,12 @@ tối ưu lossless lần cuối. Ảnh gốc luôn được giữ nguyên.
 Từ 1.1.7, thao tác thay đổi kích thước giải mã mỗi ảnh một lần và ghi PNG bằng
 chế độ lossless nhanh hơn. Thuật toán Lanczos, kích thước, vị trí, alpha, ICC và
 300 DPI vẫn giữ nguyên như trước.
+
+Từ 1.1.8, các cửa sổ đổi tên, resize/nén và metadata/watermark tự điều chỉnh theo
+màn hình và luôn dành riêng vùng nút thao tác ở cuối cửa sổ. Nút mở thư mục không
+khóa giao diện trong lúc Windows Explorer khởi động. Luồng nén kiểm tra ứng viên
+trước bước OxiPNG, bỏ qua tối ưu dư thừa khi đã đạt mục tiêu và dùng số luồng CPU
+phù hợp với máy; các cổng chất lượng, alpha, ICC/DPI và quy tắc output giữ nguyên.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 

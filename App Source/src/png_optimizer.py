@@ -16,7 +16,7 @@ from PIL import Image, ImageChops
 APP_ROOT = Path(__file__).resolve().parents[1]
 OXIPNG_VERSION = "10.2.0"
 OXIPNG_OPT_LEVEL = 4
-OXIPNG_THREADS = 2
+OXIPNG_THREADS = max(1, os.cpu_count() or 1)
 OXIPNG_TIMEOUT_SEC = 900
 DEFAULT_OXIPNG_PATH = APP_ROOT / "tools" / "oxipng" / "oxipng.exe"
 LIBWEBP_VERSION = "1.6.0"
@@ -484,7 +484,7 @@ def _build_palette_candidate(
     quantized_path = prefix.with_suffix(".quantized.tmp.png")
     metadata_path = prefix.with_suffix(".metadata.tmp.png")
     optimized_path = prefix.with_suffix(".optimized.tmp.png")
-    success = False
+    preserved_path: Path | None = None
     try:
         _run_image_tool(
             [
@@ -508,6 +508,28 @@ def _build_palette_candidate(
             raise RuntimeError(f"pngquant không tạo output cho {source.name}.")
 
         _copy_print_chunks(source, quantized_path, metadata_path)
+        metrics = _validate_pod_candidate(source, metadata_path)
+        if (
+            metrics.psnr_db < POD_PALETTE_MIN_PSNR_DB
+            or metrics.max_channel_delta > POD_PALETTE_MAX_CHANNEL_DELTA
+        ):
+            raise ValueError(
+                "Kết quả palette không đạt cổng chất lượng in POD "
+                f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
+                f"{metrics.max_channel_delta})."
+            )
+
+        input_bytes = source.stat().st_size
+        metadata_bytes = metadata_path.stat().st_size
+        if metadata_bytes <= input_bytes * (1.0 - POD_TARGET_SAVINGS):
+            preserved_path = metadata_path
+            return _PngCandidate(
+                path=metadata_path,
+                quality=POD_PALETTE_COLORS,
+                metrics=metrics,
+                output_bytes=metadata_bytes,
+            )
+
         _run_image_tool(
             [
                 str(oxipng),
@@ -538,7 +560,7 @@ def _build_palette_candidate(
                 f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
                 f"{metrics.max_channel_delta})."
             )
-        success = True
+        preserved_path = optimized_path
         return _PngCandidate(
             path=optimized_path,
             quality=POD_PALETTE_COLORS,
@@ -547,9 +569,9 @@ def _build_palette_candidate(
         )
     finally:
         quantized_path.unlink(missing_ok=True)
-        metadata_path.unlink(missing_ok=True)
-        if not success:
-            optimized_path.unlink(missing_ok=True)
+        for temporary in (metadata_path, optimized_path):
+            if temporary != preserved_path:
+                temporary.unlink(missing_ok=True)
 
 
 def _build_near_lossless_candidate(
@@ -570,7 +592,7 @@ def _build_near_lossless_candidate(
     restored_path = prefix.with_suffix(".restored.tmp.png")
     metadata_path = prefix.with_suffix(".metadata.tmp.png")
     optimized_path = prefix.with_suffix(".optimized.tmp.png")
-    success = False
+    preserved_path: Path | None = None
     try:
         _run_image_tool(
             [
@@ -607,6 +629,29 @@ def _build_near_lossless_candidate(
 
         _restore_source_alpha(source, decoded_path, restored_path)
         _copy_print_chunks(source, restored_path, metadata_path)
+        metrics = _validate_pod_candidate(source, metadata_path)
+        if (
+            not metrics.alpha_exact
+            or metrics.max_channel_delta > max_channel_delta
+            or metrics.psnr_db < POD_MIN_PSNR_DB
+        ):
+            raise ValueError(
+                f"Kết quả q{quality} không đạt cổng chất lượng in POD "
+                f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
+                f"{metrics.max_channel_delta})."
+            )
+
+        input_bytes = source.stat().st_size
+        metadata_bytes = metadata_path.stat().st_size
+        if metadata_bytes <= input_bytes * (1.0 - POD_TARGET_SAVINGS):
+            preserved_path = metadata_path
+            return _PngCandidate(
+                path=metadata_path,
+                quality=quality,
+                metrics=metrics,
+                output_bytes=metadata_bytes,
+            )
+
         _run_image_tool(
             [
                 str(oxipng),
@@ -638,7 +683,7 @@ def _build_near_lossless_candidate(
                 f"(PSNR {metrics.psnr_db:.2f} dB, sai khác tối đa "
                 f"{metrics.max_channel_delta})."
             )
-        success = True
+        preserved_path = optimized_path
         return _PngCandidate(
             path=optimized_path,
             quality=quality,
@@ -646,10 +691,15 @@ def _build_near_lossless_candidate(
             output_bytes=optimized_path.stat().st_size,
         )
     finally:
-        for temporary in (webp_path, decoded_path, restored_path, metadata_path):
-            temporary.unlink(missing_ok=True)
-        if not success:
-            optimized_path.unlink(missing_ok=True)
+        for temporary in (
+            webp_path,
+            decoded_path,
+            restored_path,
+            metadata_path,
+            optimized_path,
+        ):
+            if temporary != preserved_path:
+                temporary.unlink(missing_ok=True)
 
 
 def _run_image_tool(
@@ -739,7 +789,7 @@ def _validate_pod_candidate(source_path: Path, candidate_path: Path) -> _PngQual
 
 
 def _measure_composited_quality(
-    source: Image.Image, candidate: Image.Image, *, tile_size: int = 512
+    source: Image.Image, candidate: Image.Image, *, tile_size: int = 1024
 ) -> _PngQualityMetrics:
     source_alpha = source.getchannel("A")
     candidate_alpha = candidate.getchannel("A")

@@ -66,6 +66,12 @@ mã hóa PNG lossless nhanh hơn. Phép đo trên ảnh POD mẫu 4200×4800 gi�
 resize từ khoảng 16,3 xuống 3,15 giây; pixel, alpha, Lanczos, ICC và 300 DPI giữ
 nguyên như phiên bản trước.
 
+Từ 1.1.8, popup đổi tên, resize/nén và metadata/watermark tự vừa màn hình, đồng
+thời giữ thanh nút thao tác luôn ở cuối cửa sổ. Mở thư mục local chạy ngoài luồng
+giao diện. Luồng nén loại ứng viên không đạt trước OxiPNG, bỏ bước OxiPNG khi đã
+đạt mức giảm tối thiểu và dùng CPU theo máy; phép đo ảnh 4000×4000 giảm từ khoảng
+81,6 xuống 57,2 giây với cùng file đầu ra được chọn và giữ nguyên cổng chất lượng.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.

@@ -202,7 +202,12 @@ class PngOptimizationTests(unittest.TestCase):
             create_pod_art(source)
             source_bytes = source.read_bytes()
 
-            result = png_optimizer.optimize_png_for_pod(source, output)
+            with patch.object(
+                png_optimizer,
+                "_run_image_tool",
+                wraps=png_optimizer._run_image_tool,
+            ) as run_tool:
+                result = png_optimizer.optimize_png_for_pod(source, output)
 
             self.assertEqual(source.read_bytes(), source_bytes)
             self.assertEqual(result.compression_mode, "pod-palette-256")
@@ -213,6 +218,8 @@ class PngOptimizationTests(unittest.TestCase):
                 result.max_channel_delta,
                 png_optimizer.POD_PALETTE_MAX_CHANNEL_DELTA,
             )
+            called_tools = [Path(call.args[0][0]).name for call in run_tool.call_args_list]
+            self.assertEqual(called_tools, ["pngquant.exe"])
             with Image.open(source) as original, Image.open(output) as optimized:
                 original.load()
                 optimized.load()
@@ -223,6 +230,65 @@ class PngOptimizationTests(unittest.TestCase):
                 )
                 self.assertEqual(original.info.get("dpi"), optimized.info.get("dpi"))
                 self.assertNotIn("AutoMockupTest", optimized.info)
+
+    def test_rejected_near_lossless_candidate_never_runs_oxipng(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.png"
+            output = root / "output.png"
+            create_png(source)
+            commands: list[list[str]] = []
+
+            def fake_run(command: list[str], **_kwargs: object) -> None:
+                commands.append(command)
+                if Path(command[0]).name.casefold() == "cwebp.exe":
+                    Path(command[command.index("-o") + 1]).write_bytes(b"webp")
+                elif Path(command[0]).name.casefold() == "dwebp.exe":
+                    Path(command[command.index("-o") + 1]).write_bytes(b"decoded")
+
+            bad_metrics = png_optimizer._PngQualityMetrics(
+                psnr_db=20.0,
+                max_channel_delta=120,
+                alpha_exact=False,
+            )
+            with (
+                patch.object(png_optimizer, "_run_image_tool", side_effect=fake_run),
+                patch.object(
+                    png_optimizer,
+                    "_restore_source_alpha",
+                    side_effect=lambda _source, _decoded, restored: shutil.copy2(
+                        source, restored
+                    ),
+                ),
+                patch.object(
+                    png_optimizer,
+                    "_copy_print_chunks",
+                    side_effect=lambda _source, _candidate, metadata: shutil.copy2(
+                        source, metadata
+                    ),
+                ),
+                patch.object(
+                    png_optimizer,
+                    "_validate_pod_candidate",
+                    return_value=bad_metrics,
+                ),
+                self.assertRaisesRegex(ValueError, "không đạt cổng chất lượng"),
+            ):
+                png_optimizer._build_near_lossless_candidate(
+                    source,
+                    output,
+                    quality=png_optimizer.POD_SECONDARY_NEAR_LOSSLESS,
+                    max_channel_delta=png_optimizer.POD_SECONDARY_MAX_CHANNEL_DELTA,
+                    cwebp=root / "cwebp.exe",
+                    dwebp=root / "dwebp.exe",
+                    oxipng=root / "oxipng.exe",
+                    timeout_sec=30,
+                )
+
+            self.assertEqual(
+                [Path(command[0]).name.casefold() for command in commands],
+                ["cwebp.exe", "dwebp.exe"],
+            )
 
     def test_real_oxipng_reduces_size_without_changing_pixels_color_or_dpi(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -281,7 +347,10 @@ class PngOptimizationTests(unittest.TestCase):
             self.assertIsInstance(command, list)
             self.assertIn("--nx", command)
             self.assertEqual(command[command.index("-o") + 1], "4")
-            self.assertEqual(command[command.index("--threads") + 1], "2")
+            self.assertEqual(
+                command[command.index("--threads") + 1],
+                str(png_optimizer.OXIPNG_THREADS),
+            )
             self.assertNotIn("--alpha", command)
             self.assertNotIn("--strip", command)
             self.assertNotIn("--scale16", command)
