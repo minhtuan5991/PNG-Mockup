@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.8
+# PNG Mockup 1.1.9
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -13,6 +13,11 @@ màn hình và luôn dành riêng vùng nút thao tác ở cuối cửa sổ. N�
 khóa giao diện trong lúc Windows Explorer khởi động. Luồng nén kiểm tra ứng viên
 trước bước OxiPNG, bỏ qua tối ưu dư thừa khi đã đạt mục tiêu và dùng số luồng CPU
 phù hợp với máy; các cổng chất lượng, alpha, ICC/DPI và quy tắc output giữ nguyên.
+
+Từ 1.1.9, **Công cụ ảnh** có một vùng chọn/kéo thả tệp và bốn checkbox
+**Kích thước**, **Nén PNG**, **Metadata**, **Watermark**. Tùy chọn mở ngay bên dưới
+khi bật tính năng; kết quả được ghi vào thư mục mới cho mỗi lượt chạy. Hai chức
+năng đổi tên PNG/Mockup đã được loại bỏ.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 
@@ -35,7 +40,7 @@ nằm trong bộ cài.
 
 1. Đặt thiết kế `.png` vào `PNG`.
 2. Đặt PSD/PSB đã chuẩn bị Smart Object vào `Mockup`.
-3. Dùng **Đổi tên** nếu cần bổ sung marker theo quy tắc bên dưới.
+3. Chuẩn bị tên PNG/PSD với các marker theo quy tắc bên dưới.
 4. Bấm **Chạy thử 1 job**, kiểm tra ảnh trong `Output`, rồi **Bắt đầu / Tiếp tục**.
 
 | Loại | Quy tắc giữ nguyên |
@@ -69,11 +74,31 @@ Không chạy nhiều lượt tự động hóa PSD cùng lúc trên cùng một
 
 ## Công cụ ảnh
 
-Giữ các tiện ích đổi tên PNG/Mockup, thay đổi kích thước/nén PNG, xóa metadata và
-gắn watermark thủ công. Nút mở tiện ích có tên **Chọn ảnh để xử lý**; tùy chọn
-bên trong vẫn là **Nén ảnh PNG**. Chế độ nén được bật sẵn và tự dùng palette thích
-ứng có cổng kiểm tra chất lượng, không có thanh chất lượng hoặc nhiều preset.
-Công cụ giữ nguyên kích thước, ICC và DPI;
+Chọn **Chọn tệp ảnh** hoặc kéo trực tiếp từ Windows Explorer vào gallery. Không
+cần chọn thư mục trước. Có thể thêm ảnh từ nhiều thư mục, tìm theo tên, chọn/bỏ
+chọn và loại ảnh khỏi danh sách (không xóa tệp gốc). Bàn phím: Tab đến gallery,
+dùng phím mũi tên để di chuyển, Space để chọn/bỏ chọn, Ctrl+A để chọn tất cả.
+
+Bên dưới gallery có bốn checkbox; mỗi checkbox mở tùy chọn ngay tại trang:
+
+- **Kích thước**: chỉ PNG nền trong suốt, chọn 4500×5400 hoặc 4200×4800; giữ
+  Lanczos, căn giữa, cách mép trên 25 px và 300 DPI như trước.
+- **Nén PNG**: một chế độ palette tự động cho POD với cổng kiểm tra chất lượng.
+  Giữ kích thước, ICC và DPI khi không bật xóa metadata.
+- **Metadata**: xóa Comment, EXIF, XMP, thumbnail EXIF, IPTC và ICC; giữ pixel và DPI.
+  Hỗ trợ PNG, JPG/JPEG và WebP.
+- **Watermark**: giữ yêu cầu PNG trong suốt 2000×2000 px / 72 DPI, chỉ gắn vào ảnh
+  cùng kích thước. Khi bật, Metadata được bật bắt buộc như trước. Khổ resize lớn
+  không tương thích watermark 2000×2000; app báo rõ trước khi xử lý.
+
+Sau khi bấm **Bắt đầu xử lý**, app xử lý tuần tự và tạo thư mục mới có tên
+`PNG Mockup - Đã xử lý YYYY-MM-DD HH-MM-SS` cạnh tệp đầu tiên được chọn. Mỗi ảnh
+chỉ có một bản kết quả sau toàn bộ tác vụ; giữ phần mở rộng và tên gốc, thêm số
+nếu các thư mục nguồn có tên tệp trùng nhau. Các lượt chạy không ghi đè nhau.
+Bấm **Mở thư mục kết quả** để xem ảnh. Ảnh nguồn luôn được giữ nguyên.
+
+Chế độ nén tự dùng palette thích ứng có cổng kiểm tra chất lượng, không có thanh
+chất lượng hoặc nhiều preset;
 palette có thể giảm số màu và mức alpha để đổi lấy dung lượng nhỏ hơn, tương tự
 nhóm dịch vụ nén PNG trực tuyến. Metadata văn bản không ảnh hưởng in có thể được
 loại bỏ.
@@ -82,11 +107,11 @@ Mục tiêu tối thiểu vẫn là giảm 35%; ảnh RGBA nhiều màu phù h�
 60–70%, nhưng tỷ lệ thực tế phụ thuộc nội dung và mức tối ưu của ảnh nguồn. Nếu
 palette không đạt cổng chất lượng, app tự dùng near-lossless an toàn hơn hoặc
 fallback lossless thay vì ép giảm dung lượng. Nhật ký hoàn tất hiển thị tỷ lệ
-thực tế, số ảnh đạt mục tiêu và số ảnh phải fallback. Resize cũ vẫn có thể dùng
+thực tế. Resize vẫn có thể dùng
 riêng hoặc kết hợp với nén.
 
 Tiện ích resize/nén không phải luồng xóa nền. Tiện ích thủ công tạo bản kết quả
-riêng, giữ ảnh nguồn và xử lý tên trùng theo quy tắc cũ.
+riêng và giữ ảnh nguồn.
 
 ## Giao diện và dữ liệu riêng
 

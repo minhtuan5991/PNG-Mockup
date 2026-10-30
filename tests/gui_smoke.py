@@ -59,24 +59,6 @@ def main() -> int:
         app = PngMockupGui(window)
         window.update_idletasks()
 
-        def assert_dialog_actions_fit(dialog, *buttons) -> None:
-            dialog.update_idletasks()
-            dialog_width, dialog_height = dialog.minsize()
-            for button in buttons:
-                footer = button.master
-                assert footer.master.master is dialog, "Action footer is not dialog-owned"
-                assert footer.winfo_manager() == "pack", "Action footer is not packed"
-                assert footer.pack_info().get("side") == "bottom", (
-                    "Action footer is not reserved at the bottom"
-                )
-                assert footer.winfo_reqwidth() <= dialog_width, (
-                    "Action footer is wider than the initial dialog: "
-                    f"{footer.winfo_reqwidth()} > {dialog_width}"
-                )
-                assert footer.winfo_reqheight() < dialog_height, (
-                    "Action footer is taller than the initial dialog"
-                )
-
         installed_version = json.loads(
             (SOURCE_ROOT / "version.json").read_text(encoding="utf-8")
         )["version"]
@@ -88,290 +70,112 @@ def main() -> int:
         assert window.title() == f"PNG Mockup {version_label}"
         assert app.theme_key == "png_modern"
 
-        thumbnail_source = root_path / "rename-thumbnail.png"
-        Image.new("RGBA", (640, 640), (30, 120, 210, 255)).save(thumbnail_source)
-        first_thumbnail = app._rename_thumbnail(thumbnail_source)
-        assert app._rename_thumbnail(thumbnail_source) is first_thumbnail
-        renamed_thumbnail_source = root_path / "rename-thumbnail.bl.f.png"
-        thumbnail_source.rename(renamed_thumbnail_source)
-        app._transfer_rename_thumbnail_cache(
-            thumbnail_source, renamed_thumbnail_source
+        # The tools workspace accepts files directly and uses inline options.
+        tools = app.image_tools
+        assert not hasattr(app, "open_file_renamer")
+        assert not any("rename" in key for key in app.buttons)
+        assert set(tools.features) == {"resize", "compress", "metadata", "watermark"}
+        assert not any(variable.get() for variable in tools.features.values())
+        assert tools.start_button.instate(["disabled"])
+        assert not tools.option_panels["compress"].winfo_manager()
+
+        def pump_until(predicate, timeout=15):
+            deadline = time.monotonic() + timeout
+            while not predicate():
+                window.update()
+                if time.monotonic() > deadline:
+                    raise AssertionError("Image tools timed out")
+                time.sleep(0.01)
+            window.update()
+
+        from PIL.PngImagePlugin import PngInfo
+        image_source = root_path / "Ảnh đầu vào.png"
+        metadata = PngInfo()
+        metadata.add_text("Comment", "remove this")
+        Image.new("RGB", (96, 80), (30, 120, 210)).save(
+            image_source, compress_level=0, dpi=(300, 300),
+            icc_profile=b"gui-smoke-print-profile", pnginfo=metadata,
         )
-        assert app._rename_thumbnail(renamed_thumbnail_source) is first_thumbnail
-
-        psd_source = root_path / "large-mockup.psd"
-        psd_source.write_bytes(b"placeholder only")
-        with patch("gui.Image.open", side_effect=AssertionError("PSD was decoded")):
-            psd_thumbnail = app._rename_thumbnail(psd_source)
-        assert psd_thumbnail is app._rename_thumbnail(psd_source)
-
-        button_keys = list(app.buttons)
-        assert "batch_metadata_clean" in button_keys
-        assert (
-            button_keys.index("batch_metadata_clean")
-            == button_keys.index("batch_resize") + 1
-        )
-        assert (
-            str(app.buttons["batch_metadata_clean"].cget("text"))
-            == "Chọn ảnh để xử lý"
-        )
-        assert (
-            str(app.buttons["batch_resize"].cget("text"))
-            == "Chọn ảnh để xử lý"
-        )
-        pending_widgets = [window]
-        visible_texts: set[str] = set()
-        while pending_widgets:
-            widget = pending_widgets.pop()
-            pending_widgets.extend(widget.winfo_children())
-            try:
-                text = str(widget.cget("text"))
-            except tk.TclError:
-                continue
-            if text:
-                visible_texts.add(text)
-        assert "Thay đổi kích thước và Nén dung lượng PNG phù hợp cho POD" in visible_texts
-        assert str(app.buttons["png"].cget("style")) == "Bold.TButton"
-        assert str(app.buttons["mockup"].cget("style")) == "Bold.TButton"
-        assert str(app.buttons["rename_png"].cget("text")) == "Đổi Tên"
-        assert str(app.buttons["rename_mockup"].cget("text")) == "Đổi Tên"
-        assert str(app.buttons["rename_png"].cget("style")) == "Bold.TButton"
-        assert str(app.buttons["rename_mockup"].cget("style")) == "Bold.TButton"
-        assert str(app.buttons["force_stop"].cget("style")) == "BoldDanger.TButton"
-        assert str(app.buttons["output"].cget("style")) == "BoldQuiet.TButton"
-        assert str(app.output_watermark_choose_button.cget("style")) == "SoftGreenOutline.TButton"
-        for key in ("refresh_top", "reset_top", "run_error_top"):
-            assert str(app.buttons[key].cget("style")) == "SoftGreenOutline.TButton"
-
-        from png_optimizer import (
-            POD_PALETTE_MAX_CHANNEL_DELTA,
-            PngImageInfo,
-            _measure_composited_quality,
-            inspect_png,
-        )
-
-        resize_source = root_path / "resize-dialog-source.png"
-        Image.new("RGBA", (96, 80), (30, 120, 210, 180)).save(
-            resize_source
-        )
-        resize_info = PngImageInfo(
-            path=resize_source,
-            width=4200,
-            height=4800,
-            mode="RGBA",
-            alpha_extrema=(180, 180),
-        )
-        resize_dialog_errors: list[str] = []
-
-        def inspect_and_close_resize_dialog() -> None:
-            try:
-                resize_dialog = next(
-                    child
-                    for child in window.winfo_children()
-                    if isinstance(child, tk.Toplevel)
-                    and child.title() == "Thay đổi kích thước/Nén ảnh PNG"
-                )
-                pending_resize_widgets = [resize_dialog]
-                resize_texts: set[str] = set()
-                resize_checks: dict[str, ttk.Checkbutton] = {}
-                close_resize_button: ttk.Button | None = None
-                start_resize_button: ttk.Button | None = None
-                while pending_resize_widgets:
-                    widget = pending_resize_widgets.pop()
-                    pending_resize_widgets.extend(widget.winfo_children())
-                    try:
-                        text = str(widget.cget("text"))
-                    except tk.TclError:
-                        continue
-                    if text:
-                        resize_texts.add(text)
-                    if isinstance(widget, ttk.Checkbutton) and text in {
-                        "4500x5400",
-                        "4200x4800",
-                        "Nén ảnh PNG",
-                    }:
-                        resize_checks[text] = widget
-                    if isinstance(widget, ttk.Button) and text == "Đóng":
-                        close_resize_button = widget
-                    if isinstance(widget, ttk.Button) and text == "Bắt đầu xử lý":
-                        start_resize_button = widget
-
-                assert set(resize_checks) == {
-                    "4500x5400",
-                    "4200x4800",
-                    "Nén ảnh PNG",
-                }
-                assert any(
-                    "một chế độ nén tự động" in text
-                    and "ICC và DPI" in text
-                    and "lượng tử hóa màu/alpha" in text
-                    for text in resize_texts
-                )
-
-                def checked(name: str) -> bool:
-                    check = resize_checks[name]
-                    return bool(
-                        resize_dialog.tk.getboolean(
-                            resize_dialog.getvar(str(check.cget("variable")))
-                        )
-                    )
-
-                assert checked("Nén ảnh PNG")
-                assert not checked("4500x5400")
-                assert not checked("4200x4800")
-
-                resize_checks["4500x5400"].invoke()
-                assert checked("4500x5400")
-                assert not checked("4200x4800")
-                assert checked("Nén ảnh PNG")
-
-                resize_checks["4200x4800"].invoke()
-                assert not checked("4500x5400")
-                assert checked("4200x4800")
-                assert checked("Nén ảnh PNG"), (
-                    "Compression must remain selected when the resize size changes"
-                )
-                assert close_resize_button is not None
-                assert start_resize_button is not None
-                assert_dialog_actions_fit(
-                    resize_dialog, close_resize_button, start_resize_button
-                )
-                with (
-                    patch(
-                        "gui.threading.Thread.start",
-                        side_effect=RuntimeError("simulated thread start failure"),
-                    ),
-                    patch("gui.messagebox.showerror") as showerror,
-                ):
-                    start_resize_button.invoke()
-                assert not app.maintenance_running
-                assert str(start_resize_button.cget("state")) == "normal"
-                assert str(close_resize_button.cget("state")) == "normal"
-                showerror.assert_called_once()
-                close_resize_button.invoke()
-            except Exception as exc:
-                resize_dialog_errors.append(str(exc))
-                for child in window.winfo_children():
-                    if isinstance(child, tk.Toplevel) and child.title() == (
-                        "Thay đổi kích thước/Nén ảnh PNG"
-                    ):
-                        child.destroy()
-
-        window.after(50, inspect_and_close_resize_dialog)
-        app.open_batch_resize_options(root_path, [resize_info])
-        assert not resize_dialog_errors, resize_dialog_errors
-        assert not any(
-            isinstance(child, tk.Toplevel)
-            and child.title() == "Thay đổi kích thước/Nén ảnh PNG"
-            for child in window.winfo_children()
-        ), "Resize/compression dialog must close cleanly without hanging"
-
-        compression_source = root_path / "compression-ui-source.png"
-        compression_image = Image.new("RGB", (96, 80), (30, 120, 210))
-        compression_image.save(
-            compression_source,
-            format="PNG",
-            compress_level=0,
-            dpi=(300, 300),
-            icc_profile=b"gui-smoke-print-profile",
-        )
-        compression_image.close()
-        compression_source_bytes = compression_source.read_bytes()
-        compression_info = inspect_png(compression_source)
-        assert not compression_info.can_resize_transparent
-        compression_dialog_errors: list[str] = []
-        compression_deadline = time.monotonic() + 10
-
-        def start_compression_only() -> None:
-            try:
-                compression_dialog = next(
-                    child
-                    for child in window.winfo_children()
-                    if isinstance(child, tk.Toplevel)
-                    and child.title() == "Thay đổi kích thước/Nén ảnh PNG"
-                )
-                pending_widgets = [compression_dialog]
-                compression_check: ttk.Checkbutton | None = None
-                start_button: ttk.Button | None = None
-                close_button: ttk.Button | None = None
-                while pending_widgets:
-                    widget = pending_widgets.pop()
-                    pending_widgets.extend(widget.winfo_children())
-                    try:
-                        text = str(widget.cget("text"))
-                    except tk.TclError:
-                        continue
-                    if isinstance(widget, ttk.Checkbutton) and text == "Nén ảnh PNG":
-                        compression_check = widget
-                    elif isinstance(widget, ttk.Button) and text == "Bắt đầu xử lý":
-                        start_button = widget
-                    elif isinstance(widget, ttk.Button) and text == "Đóng":
-                        close_button = widget
-                assert compression_check is not None
-                assert start_button is not None
-                assert close_button is not None
-                assert_dialog_actions_fit(
-                    compression_dialog, start_button, close_button
-                )
-                assert compression_dialog.tk.getboolean(
-                    compression_dialog.getvar(str(compression_check.cget("variable")))
-                )
-                start_button.invoke()
-
-                def close_when_finished() -> None:
-                    try:
-                        output = root_path / "Done Nén PNG" / compression_source.name
-                        if output.is_file() and str(close_button.cget("state")) == "normal":
-                            close_button.invoke()
-                            return
-                        if time.monotonic() >= compression_deadline:
-                            raise AssertionError("Compression-only UI run timed out")
-                        compression_dialog.after(50, close_when_finished)
-                    except Exception as exc:
-                        compression_dialog_errors.append(str(exc))
-                        compression_dialog.destroy()
-
-                compression_dialog.after(50, close_when_finished)
-            except Exception as exc:
-                compression_dialog_errors.append(str(exc))
-                for child in window.winfo_children():
-                    if isinstance(child, tk.Toplevel) and child.title() == (
-                        "Thay đổi kích thước/Nén ảnh PNG"
-                    ):
-                        child.destroy()
-
+        original_bytes = image_source.read_bytes()
         with (
-            patch("gui.messagebox.showinfo") as compression_notice,
-            patch("gui.messagebox.showwarning") as compression_warning,
-            patch("gui.messagebox.showerror") as compression_error,
+            patch("image_tools_ui.filedialog.askopenfilenames", return_value=(str(image_source),)) as choose,
+            patch("image_tools_ui.filedialog.askdirectory") as folder_prompt,
         ):
-            window.after(50, start_compression_only)
-            app.open_batch_resize_options(root_path, [compression_info])
-        assert not compression_dialog_errors, compression_dialog_errors
-        assert compression_notice.called
-        assert not compression_warning.called
-        assert not compression_error.called
-        compression_output = root_path / "Done Nén PNG" / compression_source.name
-        assert compression_output.is_file()
-        assert compression_source.read_bytes() == compression_source_bytes
-        assert compression_output.stat().st_size < compression_source.stat().st_size
-        with Image.open(compression_source) as original, Image.open(
-            compression_output
-        ) as optimized:
-            original.load()
-            optimized.load()
-            assert original.size == optimized.size
-            original_rgba = original.convert("RGBA")
-            optimized_rgba = optimized.convert("RGBA")
-            try:
-                assert _measure_composited_quality(
-                    original_rgba, optimized_rgba
-                ).max_channel_delta <= POD_PALETTE_MAX_CHANNEL_DELTA
-            finally:
-                original_rgba.close()
-                optimized_rgba.close()
-            assert original.info.get("icc_profile") == optimized.info.get("icc_profile")
-            assert original.info.get("dpi") == optimized.info.get("dpi")
+            app.buttons["image_tools_choose"].invoke()
+        choose.assert_called_once()
+        folder_prompt.assert_not_called()
+        pump_until(lambda: not tools.loading)
+        assert len(tools.images) == 1 and image_source.resolve() in tools.selected
+
+        # Exercise the real Unicode Explorer drop handler, not just add_files().
+        import ctypes
+        import os
+        if os.name == "nt":
+            assert tools.drop_target.available
+            dropped_source = root_path / "Tệp kéo thả.png"
+            Image.new("RGBA", (48, 40), (20, 80, 160, 180)).save(dropped_source)
+            from ctypes import wintypes
+            class DropFiles(ctypes.Structure):
+                _fields_ = [("pFiles", wintypes.DWORD), ("pt", wintypes.POINT), ("fNC", wintypes.BOOL), ("fWide", wintypes.BOOL)]
+            names = (str(dropped_source) + "\0" + str(image_source) + "\0\0").encode("utf-16-le")
+            header = DropFiles(ctypes.sizeof(DropFiles), wintypes.POINT(0, 0), False, True)
+            payload = bytes(header) + names
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+            kernel.GlobalAlloc.restype = wintypes.HGLOBAL
+            kernel.GlobalLock.argtypes = [wintypes.HGLOBAL]
+            kernel.GlobalLock.restype = ctypes.c_void_p
+            kernel.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+            handle = kernel.GlobalAlloc(0x42, len(payload))
+            assert handle
+            pointer = kernel.GlobalLock(handle)
+            ctypes.memmove(pointer, payload, len(payload))
+            kernel.GlobalUnlock(handle)
+            user = ctypes.WinDLL("user32", use_last_error=True)
+            user.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_ssize_t]
+            user.SendMessageW.restype = ctypes.c_ssize_t
+            user.SendMessageW(tools.drop_target._hwnd, 0x0233, handle, 0)
+            pump_until(lambda: dropped_source.resolve() in tools.images and not tools.loading)
+            assert len(tools.images) == 2  # duplicate is ignored
+            tools.selected = {dropped_source.resolve()}
+            tools.remove_selected()
+            assert len(tools.images) == 1
+            tools.select_all(True)
+
+        tools.feature_checks["compress"].invoke()
+        assert tools.option_panels["compress"].winfo_manager() == "pack"
+        assert tools.start_button.instate(["!disabled"])
+        with patch("image_tools_ui.threading.Thread.start", side_effect=RuntimeError("test launch failure")):
+            tools.start_button.invoke()
+        assert not app.maintenance_running
+        assert tools.start_button.instate(["!disabled"])
+        tools.start_button.invoke()
+        pump_until(lambda: not app.maintenance_running)
+        compression_dir = tools.output_dir
+        assert compression_dir and compression_dir.is_dir()
+        compressed = compression_dir / image_source.name
+        assert compressed.is_file() and compressed.stat().st_size < len(original_bytes)
+        assert image_source.read_bytes() == original_bytes
+        with Image.open(compressed) as optimized:
+            assert optimized.size == (96, 80)
+            assert optimized.info["icc_profile"] == b"gui-smoke-print-profile"
+            assert abs(optimized.info["dpi"][0] - 300) < 0.02
+        tools.feature_checks["compress"].invoke()
+        tools.feature_checks["metadata"].invoke()
+        tools.start_button.invoke()
+        pump_until(lambda: not app.maintenance_running)
+        assert tools.output_dir != compression_dir
+        with Image.open(tools.output_dir / image_source.name) as cleaned:
+            assert "Comment" not in cleaned.info
+            assert "icc_profile" not in cleaned.info
+            assert cleaned.size == (96, 80)
+        assert image_source.read_bytes() == original_bytes
+        tools.feature_checks["watermark"].invoke()
+        assert tools.features["metadata"].get()
+        assert tools.feature_checks["metadata"].instate(["disabled"])
+        assert tools.option_panels["watermark"].winfo_manager() == "pack"
+        tools.feature_checks["watermark"].invoke()
+        assert tools.feature_checks["metadata"].instate(["!disabled"])
 
         def all_widgets(parent):
             pending = [parent]
@@ -494,85 +298,6 @@ def main() -> int:
         assert config.load_config().output_watermark_path == watermark.resolve()
         assert app.validate_output_watermark()
 
-        # Rename uses the real file operations and retains old naming rules.
-        rename_folder = config.load_config().png_dir
-        rename_source = rename_folder / "shirt.png"
-        Image.new("RGBA", (64, 64), (80, 100, 180, 200)).save(rename_source)
-        rename_errors = []
-        def rename_dialog_action():
-            dialog = next(child for child in window.winfo_children() if isinstance(child, HiddenToplevel))
-            try:
-                assert dialog.state() == "withdrawn"
-                control(dialog, ttk.Button, "Chọn tất cả").invoke()
-                control(dialog, ttk.Checkbutton, "Áo sáng màu (.bl)").invoke()
-                control(dialog, ttk.Checkbutton, "Mặt trước (.f)").invoke()
-                rename_button = control(dialog, ttk.Button, "Đổi tên")
-                close_button = control(dialog, ttk.Button, "Đóng")
-                assert_dialog_actions_fit(dialog, rename_button, close_button)
-                rename_button.invoke()
-                assert (rename_folder / "shirt.bl.f.png").is_file()
-                assert not rename_source.exists()
-                close_button.invoke()
-            except Exception as exc:
-                rename_errors.append(repr(exc))
-                dialog.destroy()
-        window.after(50, rename_dialog_action)
-        app.open_file_renamer(rename_folder, "PNG", (".png",), "png")
-        assert not rename_errors, rename_errors
-
-        # Manual metadata processing is independent of the auto-watermark state.
-        from PIL.PngImagePlugin import PngInfo
-        manual_source = root_path / "manual-metadata.png"
-        pnginfo = PngInfo()
-        pnginfo.add_text("Comment", "must be removed")
-        Image.new("RGB", (64, 64), (10, 20, 30)).save(manual_source, pnginfo=pnginfo)
-        manual_original = manual_source.read_bytes()
-        manual_output = root_path / "Done" / "manual-metadata.cleaned.png"
-        manual_errors = []
-        manual_deadline = time.monotonic() + 10
-        def manual_dialog_action():
-            dialog = next(child for child in window.winfo_children() if isinstance(child, HiddenToplevel))
-            try:
-                assert dialog.state() == "withdrawn"
-                start = control(dialog, ttk.Button, "Bắt đầu xử lý")
-                close = control(dialog, ttk.Button, "Đóng")
-                assert_dialog_actions_fit(dialog, start, close)
-                start.invoke()
-                def finish_when_done():
-                    try:
-                        if not app.maintenance_running:
-                            assert manual_output.is_file()
-                            close.invoke()
-                            return
-                        if time.monotonic() >= manual_deadline:
-                            raise AssertionError("Manual metadata UI run timed out")
-                        dialog.after(50, finish_when_done)
-                    except Exception as exc:
-                        manual_errors.append(repr(exc))
-                        dialog.destroy()
-                dialog.after(50, finish_when_done)
-            except Exception as exc:
-                manual_errors.append(repr(exc))
-                dialog.destroy()
-        with (
-            patch("gui.filedialog.askdirectory", return_value=str(root_path)),
-            patch("gui.filedialog.askopenfilenames", return_value=(str(manual_source),)),
-            patch("gui.messagebox.askyesno", return_value=True),
-            patch("gui.messagebox.showinfo") as manual_notice,
-            patch("gui.messagebox.showwarning") as manual_warning,
-            patch("gui.messagebox.showerror") as manual_error,
-        ):
-            window.after(50, manual_dialog_action)
-            app.open_manual_metadata_cleaner()
-        assert not manual_errors, manual_errors
-        assert manual_notice.called
-        manual_warning.assert_not_called()
-        manual_error.assert_not_called()
-        assert manual_source.read_bytes() == manual_original
-        with Image.open(manual_output) as cleaned:
-            assert "Comment" not in cleaned.info
-            assert cleaned.size == (64, 64)
-
         from task_completion import RunSummary
         with patch("gui.play_system_notification") as play_sound:
             app._notify_task_completion("Tạo mockup PNG", 0, 65,
@@ -595,7 +320,7 @@ def main() -> int:
         assert app.count_vars["failed"].get() == "1"
         assert app.progress_var.get() == 50.0
         # No channel is shown quietly; the false legacy startup flag was ignored.
-        assert app._startup_update_checked
+        pump_until(lambda: app.update_status_var.get() == "Chưa cấu hình GitHub riêng.")
         assert app.update_popup is None
         assert app.update_status_var.get() == "Chưa cấu hình GitHub riêng."
         assert app.buttons["install_update"].instate(["disabled"])
@@ -613,7 +338,7 @@ def main() -> int:
         window.destroy()
         hidden_dialogs.stop()
         disabled_channel.stop()
-    print("GUI smoke checks passed: five palettes, three pages, hidden config/settings, rename, compression, metadata, task controls, updates, notifications; all windows withdrawn")
+    print("GUI smoke checks passed: five palettes, three pages, hidden config/settings, file drop, inline tools, compression, metadata, task controls, updates, notifications; all windows withdrawn")
     return 0
 
 

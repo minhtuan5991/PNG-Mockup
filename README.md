@@ -72,6 +72,13 @@ giao diện. Luồng nén loại ứng viên không đạt trước OxiPNG, bỏ
 đạt mức giảm tối thiểu và dùng CPU theo máy; phép đo ảnh 4000×4000 giảm từ khoảng
 81,6 xuống 57,2 giây với cùng file đầu ra được chọn và giữ nguyên cổng chất lượng.
 
+Từ 1.1.9, **Công cụ ảnh** dùng gallery chọn/kéo thả tệp trực tiếp, bỏ bước chọn
+folder. Bốn checkbox **Kích thước**, **Nén PNG**, **Metadata**, **Watermark** mở
+tùy chọn ngay bên dưới. Một lượt tạo một thư mục kết quả mới cạnh tệp đầu tiên,
+giữ ảnh gốc và xử lý các ảnh tuần tự. Đã bỏ chức năng đổi tên PNG/Mockup ở cả
+trang công cụ và trang mockup. Watermark giữ yêu cầu 2000×2000 / 72 DPI và kiểm
+tra ảnh đích khớp kích thước; các thuật toán và cài đặt khác giữ nguyên.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.
