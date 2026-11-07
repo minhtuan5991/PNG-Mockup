@@ -13,6 +13,7 @@ SOURCE_ROOT = PROJECT_ROOT / "App Source"
 sys.path.insert(0, str(SOURCE_ROOT / "src"))
 
 from config import DEFAULT_CONFIG, load_config  # noqa: E402
+from file_renamer import renamed_path  # noqa: E402
 from mockup_mode import explicit_sides_from_path  # noqa: E402
 from queue_manager import (  # noqa: E402
     build_queue,
@@ -30,6 +31,24 @@ def touch(path: Path) -> Path:
 
 
 class NamingRulesTests(unittest.TestCase):
+    def test_renamer_uses_documented_markers(self) -> None:
+        folder = Path("C:/work")
+        self.assertEqual(
+            renamed_path(folder / "1 (1).png", "bl", "f").name,
+            "1.bl.f.png",
+        )
+        self.assertEqual(
+            renamed_path(folder / "1.wh.b.png", "bl", "f").name,
+            "1.bl.f.png",
+        )
+        self.assertEqual(
+            renamed_path(folder / "shirt (2).jpg", "wh", None, "2s").name,
+            "shirt.wh.2S.jpg",
+        )
+        self.assertEqual(
+            renamed_path(folder / "template.psd", "bl", None, "1s").name,
+            "template.1S.psd",
+        )
 
     def test_side_parser_requires_an_explicit_final_marker(self) -> None:
         self.assertEqual(explicit_sides_from_path("shirt.bl.1S.png"), 1)

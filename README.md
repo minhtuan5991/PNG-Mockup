@@ -79,6 +79,9 @@ giữ ảnh gốc và xử lý các ảnh tuần tự. Đã bỏ chức năng đ
 trang công cụ và trang mockup. Watermark giữ yêu cầu 2000×2000 / 72 DPI và kiểm
 tra ảnh đích khớp kích thước; các thuật toán và cài đặt khác giữ nguyên.
 
+Từ 1.2.0, trang **Tạo mockup** có lại hai nút **Đổi Tên** cho PNG đầu vào và
+phôi mockup. Hộp thoại xem trước tên và áp dụng bộ quy tắc của 1.1.8.
+
 Updater kiểm tra kênh `minhtuan5991/PNG-Mockup` mỗi lần mở app đã cài và tải nền,
 không ngắt job. Bản chạy từ checkout mã nguồn không tự cập nhật đè mã nguồn.
 Cài cập nhật cần người dùng chọn khi app rảnh, rồi chờ phiên hiện tại đóng.

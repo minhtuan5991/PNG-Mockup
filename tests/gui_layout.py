@@ -44,6 +44,27 @@ def main() -> int:
                 root.geometry(geometry)
                 for preset in COLOR_PRESETS:
                     app.apply_theme("png_modern", preset)
+                    app.show_page("mockup")
+                    root.update()
+                    for key in ("png", "mockup"):
+                        open_button = app.buttons[key]
+                        rename_button = app.buttons[f"rename_{key}"]
+                        for button in (open_button, rename_button):
+                            detail = (scale, geometry, preset, button.cget("text"))
+                            assert button.winfo_ismapped(), detail
+                            assert button.winfo_width() >= button.winfo_reqwidth(), detail
+                            assert (
+                                button.winfo_x() + button.winfo_width() <= button.master.winfo_width()
+                            ), detail
+                        assert (
+                            rename_button.winfo_x() + rename_button.winfo_width()
+                            == rename_button.master.winfo_width()
+                        )
+                        if rename_button.winfo_y() == open_button.winfo_y():
+                            assert rename_button.winfo_x() >= open_button.winfo_width() + 8
+                        else:
+                            assert rename_button.winfo_y() >= open_button.winfo_height() + 8
+                    app.show_page("tools")
                     for expanded in (False, True):
                         for variable in workspace.features.values():
                             variable.set(expanded)

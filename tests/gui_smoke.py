@@ -72,8 +72,9 @@ def main() -> int:
 
         # The tools workspace accepts files directly and uses inline options.
         tools = app.image_tools
-        assert not hasattr(app, "open_file_renamer")
-        assert not any("rename" in key for key in app.buttons)
+        assert {key for key in app.buttons if key.startswith("rename_")} == {
+            "rename_png", "rename_mockup",
+        }
         assert set(tools.features) == {"resize", "compress", "metadata", "watermark"}
         assert not any(variable.get() for variable in tools.features.values())
         assert tools.start_button.instate(["disabled"])
@@ -187,6 +188,64 @@ def main() -> int:
         def control(parent, kind, text):
             return next(widget for widget in all_widgets(parent)
                         if isinstance(widget, kind) and str(widget.cget("text")) == text)
+
+        # Exercise the two Tạo mockup buttons through their real dialogs.
+        app.show_page("mockup")
+        folders = config.load_config()
+        png_source = folders.png_dir / "Thiết kế.wh.b (2).png"
+        with Image.new("RGBA", (32, 32), (30, 120, 210, 255)) as image:
+            image.save(png_source)
+        psb_source = folders.mockup_dir / "Mẫu áo.bl.1S.PSB"
+        psb_source.write_bytes(b"template placeholder; preview must not decode PSB")
+        rename_cases = (
+            ("png", "PNG", png_source, "Thiết kế.bl.f.png",
+             ("Áo sáng màu (.bl)", "Mặt trước (.f)")),
+            ("mockup", "Mockup", psb_source, "Mẫu áo.2S.PSB",
+             ("Áo tối màu (.wh)", "Mockup 2 Mặt (.2S)")),
+        )
+        for key, label, source, new_name, markers in rename_cases:
+            button = app.buttons[f"rename_{key}"]
+            assert button.master is app.buttons[key].master
+            assert str(button.cget("text")) == "Đổi Tên"
+            assert str(button.cget("style")) == "Bold.TButton"
+            original = source.read_bytes()
+            errors: list[Exception] = []
+
+            def rename_in_dialog():
+                dialog = None
+                try:
+                    dialog = next(
+                        child for child in window.winfo_children()
+                        if isinstance(child, tk.Toplevel)
+                        and child.title() == f"Đổi tên file - {label}"
+                    )
+                    control(dialog, ttk.Button, "Chọn tất cả").invoke()
+                    for marker in markers:
+                        control(dialog, ttk.Checkbutton, marker).invoke()
+                    preview = f"{source.name}  →  {new_name}"
+                    label_variables = [
+                        str(widget.cget("textvariable"))
+                        for widget in all_widgets(dialog) if isinstance(widget, ttk.Label)
+                    ]
+                    assert any(dialog.getvar(name) == preview for name in label_variables if name)
+                    rename_button = control(dialog, ttk.Button, "Đổi tên")
+                    close_button = control(dialog, ttk.Button, "Đóng")
+                    assert rename_button.master is close_button.master
+                    assert rename_button.master.pack_info()["side"] == "bottom"
+                    rename_button.invoke()
+                    close_button.invoke()
+                except Exception as exc:
+                    errors.append(exc)
+                    if dialog is not None and dialog.winfo_exists():
+                        dialog.destroy()
+
+            with patch("gui.messagebox.showerror", side_effect=AssertionError("Rename failed")):
+                after_id = window.after(25, rename_in_dialog)
+                button.invoke()
+                window.after_cancel(after_id)
+            assert not errors, errors
+            assert source.with_name(new_name).read_bytes() == original
+            assert not source.exists()
 
         open_path_target = root_path / "folder-open-speed-test"
         open_path_called = threading.Event()

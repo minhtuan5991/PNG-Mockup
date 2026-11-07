@@ -10,10 +10,11 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 from cleanup import cleanup_app_files, format_cleanup_report
 from config import PNG_IMAGE_EXTS, SUPPORTED_IMAGE_EXTS, load_config
-from mockup_mode import explicit_sides_from_path
+from file_renamer import build_rename_plan, execute_rename_plan, renamed_path, renameable_files
+from mockup_mode import MOCKUP_FILE_EXTS, PSD_MOCKUP_EXTS, explicit_sides_from_path
 from output_watermark import (
     OutputWatermarkError, WATERMARK_DPI, WATERMARK_SIZE,
     inspect_watermark,
@@ -25,7 +26,7 @@ from task_completion import (
     CompletionNotice, RunSummary, build_completion_notice, parse_run_summary, play_system_notification,
 )
 from ui_themes import COLOR_PRESETS, UI_THEMES, apply_color_preset, normalize_color_preset, normalize_theme
-from ui_widgets import ScrollPanel, StudioButton, StudioSection, make_icon
+from ui_widgets import ScrollPanel, StudioButton, StudioSection, make_icon, render_theme_skin
 import update_manager
 from update_manager import read_current_version
 
@@ -34,6 +35,7 @@ PYTHON_BAT = ROOT / "tools" / "python.bat"
 APP_ICON = ROOT / "assets" / "app_icon.ico"
 APP_LOGO = ROOT / "assets" / "logo.png"
 APP_DISPLAY_NAME = "PNG Mockup"
+RENAME_THUMBNAIL_CACHE_LIMIT = 512
 
 
 def app_window_title(app_root: Path = ROOT) -> str:
@@ -86,6 +88,7 @@ class PngMockupGui:
         self.button_icon_refs: dict[str, ImageTk.PhotoImage] = {}
         self.brand_logo_ref: ImageTk.PhotoImage | None = None
         self._icon_specs: dict[str, tuple[ttk.Widget, str, str, int]] = {}
+        self._rename_thumbnail_cache: dict[tuple[str, int, int, str, str], ImageTk.PhotoImage] = {}
         self.pages: dict[str, ttk.Frame] = {}
         self.nav_buttons: dict[str, StudioButton] = {}
         self.scroll_panels: list[ScrollPanel] = []
@@ -242,6 +245,7 @@ class PngMockupGui:
         if color_preset_key is not None:
             self.color_preset_key = normalize_color_preset(color_preset_key)
         self.theme = apply_color_preset(UI_THEMES[self.theme_key], self.color_preset_key)
+        self._rename_thumbnail_cache.clear()
         self._configure_style()
         if hasattr(self, "image_tools"):
             self.image_tools.apply_theme()
@@ -349,8 +353,36 @@ class PngMockupGui:
         ttk.Label(body, text=note, style="SectionMuted.TLabel").pack(anchor="w", pady=(6, 12))
         actions = ttk.Frame(body, style="Section.TFrame")
         actions.pack(fill="x")
-        folder = lambda: load_config().png_dir if key == "png" else load_config().mockup_dir
-        self._button(actions, "Mở PNG" if key == "png" else "Mở Mockup", lambda: self.open_path(folder()), key, icon="folder", lock=False, style="Bold.TButton").pack(side="left")
+        is_png = key == "png"
+        folder_label = "PNG" if is_png else "Mockup"
+        folder = lambda: load_config().png_dir if is_png else load_config().mockup_dir
+        open_button = self._button(
+            actions, f"Mở {folder_label}", lambda: self.open_path(folder()), key,
+            icon="folder", lock=False, style="Bold.TButton",
+        )
+        rename_button = self._button(
+            actions, "Đổi Tên",
+            lambda: self.open_file_renamer(
+                folder(), folder_label, PNG_IMAGE_EXTS if is_png else MOCKUP_FILE_EXTS, key
+            ),
+            f"rename_{key}", icon="rename", style="Bold.TButton",
+        )
+        open_button.pack(side="left")
+        rename_button.pack(side="right", padx=(8, 0))
+
+        def fit_actions(event: tk.Event) -> None:
+            row_width = open_button.winfo_reqwidth() + rename_button.winfo_reqwidth() + 8
+            same_row = event.width >= row_width
+            rename_side = "right" if same_row else "top"
+            if rename_button.pack_info()["side"] == rename_side:
+                return
+            open_button.pack_configure(side="left" if same_row else "top", anchor="w")
+            rename_button.pack_configure(
+                side=rename_side, anchor="e",
+                padx=(8, 0) if same_row else 0, pady=0 if same_row else (8, 0),
+            )
+
+        actions.bind("<Configure>", fit_actions)
 
     def _build_mockup_page(self, parent: ttk.Frame) -> None:
         # The log grows on large screens; a single page scroll preserves every
@@ -1090,6 +1122,41 @@ class PngMockupGui:
             return
         self.root.after(40, poll_worker)
 
+    def _fit_task_dialog(
+        self,
+        dialog: tk.Toplevel,
+        *,
+        preferred_width: int,
+        preferred_height: int,
+        minimum_width: int,
+        minimum_height: int,
+    ) -> None:
+        """Size and center a task dialog without pushing its footer off-screen."""
+
+        dialog.update_idletasks()
+        available_width = max(640, dialog.winfo_screenwidth() - 48)
+        available_height = max(520, dialog.winfo_screenheight() - 96)
+        width = min(
+            available_width,
+            max(preferred_width, dialog.winfo_reqwidth()),
+        )
+        height = min(
+            available_height,
+            max(preferred_height, dialog.winfo_reqheight()),
+        )
+        dialog.minsize(
+            min(minimum_width, width),
+            min(minimum_height, height),
+        )
+
+        self.root.update_idletasks()
+        root_width = max(1, self.root.winfo_width())
+        root_height = max(1, self.root.winfo_height())
+        x = self.root.winfo_rootx() + max(0, (root_width - width) // 2)
+        y = self.root.winfo_rooty() + max(0, (root_height - height) // 2)
+        x = max(12, min(x, dialog.winfo_screenwidth() - width - 12))
+        y = max(12, min(y, dialog.winfo_screenheight() - height - 44))
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def load_log_tail(self) -> None:
         try:
@@ -1115,6 +1182,120 @@ class PngMockupGui:
     # PNG utilities and task lifecycle are retained below from the original
     # implementation. Their algorithms and file naming rules are unchanged.
 
+
+    def _rename_thumbnail_cache_key(
+        self, path: Path
+    ) -> tuple[str, int, int, str, str] | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        return (
+            str(path.absolute()).casefold(),
+            stat.st_size,
+            stat.st_mtime_ns,
+            self.theme_key,
+            self.color_preset_key,
+        )
+
+
+    def _cache_rename_thumbnail(
+        self,
+        key: tuple[str, int, int, str, str] | None,
+        thumbnail: ImageTk.PhotoImage,
+    ) -> ImageTk.PhotoImage:
+        if key is None:
+            return thumbnail
+        self._rename_thumbnail_cache[key] = thumbnail
+        while len(self._rename_thumbnail_cache) > RENAME_THUMBNAIL_CACHE_LIMIT:
+            oldest_key = next(iter(self._rename_thumbnail_cache))
+            self._rename_thumbnail_cache.pop(oldest_key)
+        return thumbnail
+
+
+    def _transfer_rename_thumbnail_cache(self, source: Path, target: Path) -> None:
+        source_path_key = str(source.absolute()).casefold()
+        matching_keys = [
+            key for key in self._rename_thumbnail_cache if key[0] == source_path_key
+        ]
+        thumbnail = None
+        for key in matching_keys:
+            thumbnail = self._rename_thumbnail_cache.pop(key)
+        target_key = self._rename_thumbnail_cache_key(target)
+        if thumbnail is not None and target_key is not None:
+            self._cache_rename_thumbnail(target_key, thumbnail)
+
+
+    def _rename_thumbnail_placeholder(
+        self, label: str = "?"
+    ) -> ImageTk.PhotoImage:
+        thumbnail_size = (88, 88)
+        theme = self.theme
+        canvas = Image.new(
+            "RGBA", thumbnail_size, self._hex_rgb(theme.surface_alt) + (255,)
+        )
+        tile = render_theme_skin(
+            theme, "panel", "thumbnail_tile", thumbnail_size, kind="panel"
+        )
+        if tile is not None:
+            canvas.alpha_composite(tile)
+        draw = ImageDraw.Draw(canvas)
+        text_box = draw.textbbox((0, 0), label)
+        text_width = text_box[2] - text_box[0]
+        text_height = text_box[3] - text_box[1]
+        draw.text(
+            (
+                (thumbnail_size[0] - text_width) // 2,
+                (thumbnail_size[1] - text_height) // 2,
+            ),
+            label,
+            fill=self._hex_rgb(theme.muted),
+        )
+        return ImageTk.PhotoImage(canvas)
+
+
+    def _rename_thumbnail(self, path: Path) -> ImageTk.PhotoImage:
+        thumbnail_size = (88, 88)
+        theme = self.theme
+        cache_key = self._rename_thumbnail_cache_key(path)
+        if cache_key is not None:
+            cached = self._rename_thumbnail_cache.pop(cache_key, None)
+            if cached is not None:
+                self._rename_thumbnail_cache[cache_key] = cached
+                return cached
+
+        if path.suffix.casefold() in PSD_MOCKUP_EXTS:
+            placeholder = self._rename_thumbnail_placeholder(
+                path.suffix.lstrip(".").upper()
+            )
+            return self._cache_rename_thumbnail(cache_key, placeholder)
+        try:
+            with Image.open(path) as source:
+                source.thumbnail(thumbnail_size, Image.Resampling.LANCZOS)
+                image = source.convert("RGBA")
+
+            canvas = Image.new("RGBA", thumbnail_size, self._hex_rgb(theme.thumb_bg) + (255,))
+            tile = render_theme_skin(
+                theme, "panel", "thumbnail_tile", thumbnail_size, kind="panel"
+            )
+            if tile is not None:
+                canvas.alpha_composite(tile)
+            left = (thumbnail_size[0] - image.width) // 2
+            top = (thumbnail_size[1] - image.height) // 2
+            canvas.alpha_composite(image, (left, top))
+            return self._cache_rename_thumbnail(
+                cache_key, ImageTk.PhotoImage(canvas)
+            )
+        except Exception:
+            return self._cache_rename_thumbnail(
+                cache_key, self._rename_thumbnail_placeholder()
+            )
+
+
+    @staticmethod
+    def _hex_rgb(value: str) -> tuple[int, int, int]:
+        value = value.lstrip("#")
+        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))  # type: ignore[return-value]
 
     def update_output_watermark_controls(self) -> None:
         choose_button = self.output_watermark_choose_button
@@ -1363,6 +1544,401 @@ class PngMockupGui:
         dialog.wait_window()
         return bool(result.get())
 
+
+    def open_file_renamer(
+        self,
+        folder: Path,
+        folder_label: str,
+        extensions: tuple[str, ...],
+        rename_mode: str = "png",
+    ) -> None:
+        if self.is_running():
+            messagebox.showwarning(
+                "Đang chạy", "Hãy chờ tác vụ hiện tại hoàn tất trước khi đổi tên.",
+                parent=self.root,
+            )
+            return
+        is_mockup = rename_mode == "mockup"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            files = renameable_files(folder, extensions)
+        except OSError as exc:
+            messagebox.showerror("Không mở được thư mục", str(exc), parent=self.root)
+            return
+        if not files:
+            messagebox.showinfo(
+                "Thư mục trống",
+                f"Không tìm thấy file ảnh phù hợp trong thư mục {folder_label}.",
+            )
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Đổi tên file - {folder_label}")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(background=self.theme.bg)
+
+        shell = ttk.Frame(dialog, style="App.TFrame")
+        shell.pack(fill="both", expand=True)
+        buttons = ttk.Frame(shell, padding=(16, 4, 16, 16), style="App.TFrame")
+        buttons.pack(side="bottom", fill="x")
+        main = ttk.Frame(shell, padding=(16, 16, 16, 8), style="App.TFrame")
+        main.pack(side="top", fill="both", expand=True)
+        ttk.Label(
+            main,
+            text=f"Đổi tên ảnh trong {folder_label}",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            main,
+            text=(
+                (
+                    "Chọn file cần đổi tên, sau đó chọn màu áo và số mặt mockup. "
+                    if is_mockup
+                    else "Chọn file cần đổi tên, sau đó chọn màu áo và mặt áo phù hợp. "
+                )
+                + "App luôn giữ nguyên đuôi ảnh thật và không ghi đè file đã có."
+            ),
+            wraplength=920,
+            justify="left",
+        ).pack(fill="x", pady=(4, 10))
+
+        list_header = ttk.Frame(main)
+        list_header.pack(fill="x")
+        file_count_var = tk.StringVar(value=f"File trong thư mục ({len(files)})")
+        ttk.Label(list_header, textvariable=file_count_var).pack(
+            side="left"
+        )
+
+        file_vars: list[tuple[Path, tk.BooleanVar]] = []
+
+        def select_all(value: bool) -> None:
+            for _, variable in file_vars:
+                variable.set(value)
+            update_all_tiles()
+            update_preview()
+
+        ttk.Button(
+            list_header, text="Bỏ chọn", command=lambda: select_all(False)
+        ).pack(side="right")
+        ttk.Button(
+            list_header, text="Chọn tất cả", command=lambda: select_all(True)
+        ).pack(side="right", padx=(0, 8))
+
+        list_shell = ttk.Frame(main, relief="solid", borderwidth=1, style="Section.TFrame")
+        list_shell.pack(fill="both", expand=True, pady=(6, 12))
+        canvas = tk.Canvas(
+            list_shell,
+            highlightthickness=0,
+            height=330,
+            background=self.theme.surface_alt,
+        )
+        scrollbar = ttk.Scrollbar(list_shell, orient="vertical", command=canvas.yview)
+        file_list = tk.Frame(canvas, background=self.theme.surface_alt, padx=8, pady=8)
+        list_window = canvas.create_window((0, 0), window=file_list, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        tile_widgets: list[tk.Frame] = []
+
+        def resize_file_list(_event: tk.Event[tk.Misc]) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def resize_list_width(event: tk.Event[tk.Misc] | None = None) -> None:
+            width = event.width if event is not None else canvas.winfo_width()
+            canvas.itemconfigure(list_window, width=width)
+            columns = max(2, width // 160)
+            for index, tile in enumerate(tile_widgets):
+                tile.grid(
+                    row=index // columns,
+                    column=index % columns,
+                    sticky="w",
+                    padx=8,
+                    pady=8,
+                )
+
+        file_list.bind("<Configure>", resize_file_list)
+        canvas.bind("<Configure>", resize_list_width)
+
+        light_var = tk.BooleanVar(value=False)
+        dark_var = tk.BooleanVar(value=False)
+        front_var = tk.BooleanVar(value=False)
+        back_var = tk.BooleanVar(value=False)
+        one_side_var = tk.BooleanVar(value=False)
+        two_side_var = tk.BooleanVar(value=False)
+        preview_var = tk.StringVar(value="Chọn file và quy tắc để xem tên mới.")
+        thumbnail_refs: list[ImageTk.PhotoImage] = []
+        dialog.thumbnail_refs = thumbnail_refs
+
+        def selected_markers() -> tuple[str | None, str | None, str | None]:
+            color = "bl" if light_var.get() else "wh" if dark_var.get() else None
+            side = "f" if front_var.get() else "b" if back_var.get() else None
+            mockup_sides = "1s" if one_side_var.get() else "2s" if two_side_var.get() else None
+            return color, side, mockup_sides
+
+        def update_preview() -> None:
+            selected = [path for path, variable in file_vars if variable.get()]
+            color, side, mockup_sides = selected_markers()
+            if not selected:
+                preview_var.set("Chọn ít nhất một file cần đổi tên.")
+                return
+            if is_mockup and mockup_sides is None:
+                preview_var.set("Chọn Mockup 1 Mặt (.1S) hoặc Mockup 2 Mặt (.2S).")
+                return
+            if not is_mockup and color is None and side is None:
+                preview_var.set("Chọn ít nhất một quy tắc màu áo hoặc mặt áo.")
+                return
+            try:
+                examples = [
+                    f"{path.name}  →  {renamed_path(path, color, side, mockup_sides).name}"
+                    for path in selected[:3]
+                ]
+            except ValueError as exc:
+                preview_var.set(str(exc))
+                return
+            if len(selected) > 3:
+                examples.append(f"... và {len(selected) - 3} file khác")
+            preview_var.set("\n".join(examples))
+
+        def update_tile(tile: tk.Frame, variable: tk.BooleanVar) -> None:
+            background = self.theme.selected if variable.get() else self.theme.surface
+            tile.configure(background=background)
+            for child in tile.winfo_children():
+                try:
+                    child.configure(background=background)
+                except tk.TclError:
+                    pass
+            tile.configure(
+                highlightbackground=self.theme.accent if variable.get() else self.theme.border,
+                highlightcolor=self.theme.accent if variable.get() else self.theme.border,
+            )
+
+        def update_all_tiles() -> None:
+            for tile, variable in tile_states:
+                update_tile(tile, variable)
+
+        def on_file_toggle(tile: tk.Frame, variable: tk.BooleanVar) -> None:
+            update_tile(tile, variable)
+            update_preview()
+
+        def toggle_tile(tile: tk.Frame, variable: tk.BooleanVar) -> None:
+            variable.set(not variable.get())
+            update_tile(tile, variable)
+            update_preview()
+
+        def choose_exclusive(
+            selected: tk.BooleanVar, other: tk.BooleanVar
+        ) -> None:
+            if selected.get():
+                other.set(False)
+            update_preview()
+
+        tile_states: list[tuple[tk.Frame, tk.BooleanVar]] = []
+        name_labels: list[tk.Label] = []
+
+        def render_file_tiles() -> None:
+            for child in file_list.winfo_children():
+                child.destroy()
+            file_vars.clear()
+            tile_states.clear()
+            tile_widgets.clear()
+            name_labels.clear()
+            thumbnail_refs.clear()
+            file_count_var.set(f"File trong thư mục ({len(files)})")
+
+            for path in files:
+                variable = tk.BooleanVar(value=False)
+                file_vars.append((path, variable))
+                thumbnail = self._rename_thumbnail(path)
+                thumbnail_refs.append(thumbnail)
+                tile = tk.Frame(
+                    file_list,
+                    width=144,
+                    height=152,
+                    background=self.theme.surface,
+                    highlightthickness=2,
+                    highlightbackground=self.theme.border,
+                    highlightcolor=self.theme.border,
+                )
+                tile.grid_propagate(False)
+                tile.pack_propagate(False)
+                check = ttk.Checkbutton(
+                    tile,
+                    variable=variable,
+                    command=lambda t=tile, v=variable: on_file_toggle(t, v),
+                    style="TCheckbutton",
+                    cursor="hand2",
+                )
+                check.place(x=4, y=4)
+                image_label = tk.Label(
+                    tile,
+                    image=thumbnail,
+                    background=self.theme.surface,
+                    cursor="hand2",
+                )
+                image_label.pack(pady=(8, 2))
+                name_label = tk.Label(
+                    tile,
+                    text=path.name,
+                    background=self.theme.surface,
+                    foreground=self.theme.text,
+                    anchor="center",
+                    justify="center",
+                    wraplength=132,
+                    cursor="hand2",
+                )
+                name_label.pack(fill="x", padx=4)
+                for widget in (image_label, name_label):
+                    widget.bind(
+                        "<Button-1>",
+                        lambda _event, t=tile, v=variable: toggle_tile(t, v),
+                    )
+                tile_states.append((tile, variable))
+                tile_widgets.append(tile)
+                name_labels.append(name_label)
+                update_tile(tile, variable)
+
+            resize_list_width()
+            canvas.yview_moveto(0.0)
+            update_preview()
+
+        render_file_tiles()
+
+        options = ttk.LabelFrame(main, text="Quy tắc tên file", padding=10)
+        options.pack(fill="x")
+        ttk.Checkbutton(
+            options,
+            text="Áo sáng màu (.bl)",
+            variable=light_var,
+            command=lambda: choose_exclusive(light_var, dark_var),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 24), pady=3)
+        ttk.Checkbutton(
+            options,
+            text="Áo tối màu (.wh)",
+            variable=dark_var,
+            command=lambda: choose_exclusive(dark_var, light_var),
+        ).grid(row=0, column=1, sticky="w", padx=(0, 24), pady=3)
+        if is_mockup:
+            ttk.Checkbutton(
+                options,
+                text="Mockup 1 Mặt (.1S)",
+                variable=one_side_var,
+                command=lambda: choose_exclusive(one_side_var, two_side_var),
+            ).grid(row=1, column=0, sticky="w", padx=(0, 24), pady=3)
+            ttk.Checkbutton(
+                options,
+                text="Mockup 2 Mặt (.2S)",
+                variable=two_side_var,
+                command=lambda: choose_exclusive(two_side_var, one_side_var),
+            ).grid(row=1, column=1, sticky="w", padx=(0, 24), pady=3)
+        else:
+            ttk.Checkbutton(
+                options,
+                text="Mặt trước (.f)",
+                variable=front_var,
+                command=lambda: choose_exclusive(front_var, back_var),
+            ).grid(row=1, column=0, sticky="w", padx=(0, 24), pady=3)
+            ttk.Checkbutton(
+                options,
+                text="Mặt sau (.b)",
+                variable=back_var,
+                command=lambda: choose_exclusive(back_var, front_var),
+            ).grid(row=1, column=1, sticky="w", padx=(0, 24), pady=3)
+
+        ttk.Label(
+            main,
+            textvariable=preview_var,
+            wraplength=920,
+            justify="left",
+            style="SectionMuted.TLabel",
+        ).pack(fill="x", pady=(10, 8))
+
+        renamed_any = False
+
+        def rename_selected() -> None:
+            nonlocal renamed_any
+            selected = [path for path, variable in file_vars if variable.get()]
+            color, side, mockup_sides = selected_markers()
+            if not selected:
+                messagebox.showwarning(
+                    "Chưa chọn file",
+                    "Hãy chọn ít nhất một file cần đổi tên.",
+                    parent=dialog,
+                )
+                return
+            if is_mockup and mockup_sides is None:
+                messagebox.showwarning(
+                    "Chưa chọn số mặt mockup",
+                    "Hãy chọn Mockup 1 Mặt (.1S) hoặc Mockup 2 Mặt (.2S).",
+                    parent=dialog,
+                )
+                return
+            if not is_mockup and color is None and side is None:
+                messagebox.showwarning(
+                    "Chưa chọn quy tắc",
+                    "Hãy chọn ít nhất một loại màu áo hoặc mặt áo.",
+                    parent=dialog,
+                )
+                return
+            try:
+                plan = build_rename_plan(selected, color, side, mockup_sides)
+                changed = execute_rename_plan(plan)
+            except (ValueError, OSError) as exc:
+                messagebox.showerror(
+                    "Không đổi tên được",
+                    str(exc),
+                    parent=dialog,
+                )
+                return
+
+            self.write_output(
+                f"\nĐã đổi tên {changed}/{len(selected)} file trong {folder_label}.\n"
+            )
+            target_by_source = {
+                str(operation.source.absolute()).casefold(): (
+                    operation.target
+                    if str(operation.source.absolute()).casefold()
+                    != str(operation.target.absolute()).casefold()
+                    else operation.source
+                )
+                for operation in plan
+            }
+            for index, (path, variable) in enumerate(file_vars):
+                target = target_by_source.get(str(path.absolute()).casefold())
+                if target is not None:
+                    if path != target:
+                        self._transfer_rename_thumbnail_cache(path, target)
+                    file_vars[index] = (target, variable)
+                    name_labels[index].configure(text=target.name)
+                variable.set(False)
+            update_all_tiles()
+            renamed_any = renamed_any or changed > 0
+            preview_var.set(
+                f"Đã đổi tên {changed}/{len(selected)} file. "
+                "Chọn nhóm file tiếp theo hoặc bấm Đóng khi hoàn tất."
+            )
+
+        ttk.Button(buttons, text="Đóng", command=dialog.destroy).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Đổi tên",
+            command=rename_selected,
+            style="Primary.TButton",
+        ).pack(side="right", padx=(0, 8))
+
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        self._fit_task_dialog(
+            dialog,
+            preferred_width=1000,
+            preferred_height=820,
+            minimum_width=760,
+            minimum_height=620,
+        )
+        dialog.focus_set()
+        dialog.wait_window()
+        if renamed_any:
+            self.refresh_status()
 
     def finish_cleanup(self, message: str, has_warnings: bool) -> None:
         self.maintenance_running = False

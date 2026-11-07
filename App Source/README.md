@@ -1,4 +1,4 @@
-# PNG Mockup 1.1.9
+# PNG Mockup 1.2.0
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -16,8 +16,9 @@ phù hợp với máy; các cổng chất lượng, alpha, ICC/DPI và quy tắc
 
 Từ 1.1.9, **Công cụ ảnh** có một vùng chọn/kéo thả tệp và bốn checkbox
 **Kích thước**, **Nén PNG**, **Metadata**, **Watermark**. Tùy chọn mở ngay bên dưới
-khi bật tính năng; kết quả được ghi vào thư mục mới cho mỗi lượt chạy. Hai chức
-năng đổi tên PNG/Mockup đã được loại bỏ.
+khi bật tính năng; kết quả được ghi vào thư mục mới cho mỗi lượt chạy.
+
+Từ 1.2.0, hai nút **Đổi Tên** ở trang **Tạo mockup** dùng lại quy tắc của 1.1.8.
 
 Tạo mockup từ PNG bằng Photoshop, với bộ chạy và dữ liệu riêng trong thư mục app.
 
@@ -40,7 +41,8 @@ nằm trong bộ cài.
 
 1. Đặt thiết kế `.png` vào `PNG`.
 2. Đặt PSD/PSB đã chuẩn bị Smart Object vào `Mockup`.
-3. Chuẩn bị tên PNG/PSD với các marker theo quy tắc bên dưới.
+3. Dùng **Đổi Tên** ở thẻ **PNG đầu vào** hoặc **PSD mockup** để chọn tệp,
+   xem trước tên mới và áp dụng marker theo quy tắc bên dưới.
 4. Bấm **Chạy thử 1 job**, kiểm tra ảnh trong `Output`, rồi **Bắt đầu / Tiếp tục**.
 
 | Loại | Quy tắc giữ nguyên |
