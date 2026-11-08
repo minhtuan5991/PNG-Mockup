@@ -14,7 +14,7 @@ from image_tools import (
     ToolImage, ToolOptions, inspect_tool_image, run_tool_batch, validate_tool_inputs,
 )
 from output_watermark import inspect_watermark
-from transparent_image_layout import SMALL_IMAGE_LONG_EDGE_PX
+from transparent_image_layout import LAYOUT_SPECS, SMALL_IMAGE_LONG_EDGE_PX
 from ui_widgets import ScrollPanel
 from windows_file_drop import WindowsFileDrop
 
@@ -151,11 +151,27 @@ class ImageToolsWorkspace(ttk.Frame):
         resize = self.option_panels["resize"]
         sizes = ttk.Frame(resize, style="Section.TFrame")
         sizes.pack(fill="x")
-        for label, value in (("4500 × 5400 px", "4500x5400"), ("4200 × 4800 px", "4200x4800")):
-            radio = ttk.Radiobutton(sizes, text=label, variable=self.layout_var, value=value)
-            radio.pack(side="left", padx=(0, 24))
+        size_choices: list[ttk.Radiobutton] = []
+        for column, (value, (width, height, _, _)) in enumerate(LAYOUT_SPECS.items()):
+            radio = ttk.Radiobutton(
+                sizes, text=f"{width} × {height} px", variable=self.layout_var, value=value,
+            )
+            radio.grid(row=0, column=column, sticky="w", padx=(0, 24))
+            size_choices.append(radio)
             self.controls.append(radio)
-        self._label(resize, "PNG nền trong suốt · Căn giữa, cách mép trên 25 px · Lanczos · 300 DPI.")
+
+        def fit_sizes(event: tk.Event) -> None:
+            column_width = max(radio.winfo_reqwidth() for radio in size_choices) + 24
+            columns = max(1, min(len(size_choices), event.width // column_width))
+            for index, radio in enumerate(size_choices):
+                radio.grid_configure(row=index // columns, column=index % columns)
+
+        sizes.bind("<Configure>", fit_sizes)
+        self._label(
+            resize,
+            "PNG nền trong suốt · Căn giữa theo chiều ngang · Lanczos · 300 DPI.\n"
+            "Khổ 2000 × 2000 px sát mép trên. Hai khổ dọc cách mép trên 25 px.",
+        )
         self._label(self.option_panels["compress"], "Một chế độ nén tự động cho POD: giữ kích thước, ICC và DPI; kiểm tra chất lượng màu/alpha trước khi lưu. Mục tiêu giảm ≥35%; ảnh đã tối ưu có thể giảm ít hơn.")
         self._label(self.option_panels["metadata"], "Xóa Comment, EXIF, XMP, thumbnail EXIF, IPTC và ICC. Giữ nguyên pixel và DPI; không mã hóa lại ảnh. Khi bật Watermark, Metadata luôn được bật như trước.")
         watermark = self.option_panels["watermark"]

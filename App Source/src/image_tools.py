@@ -34,7 +34,7 @@ class ToolOptions:
         if not (self.layout or self.compress or self.metadata or self.watermark):
             raise ValueError("Hãy chọn ít nhất một tính năng để xử lý.")
         if self.layout is not None and self.layout not in LAYOUT_SPECS:
-            raise ValueError("Hãy chọn kích thước 4500×5400 hoặc 4200×4800.")
+            raise ValueError("Hãy chọn một khổ trong mục Kích thước.")
         if self.watermark is not None:
             inspect_watermark(self.watermark)
 
@@ -85,7 +85,8 @@ def validate_tool_inputs(images: Iterable[ToolImage], options: ToolOptions) -> N
         if mismatched:
             raise ValueError(
                 "Watermark hiện yêu cầu ảnh kết quả 2000×2000 px. "
-                "Bỏ chọn Kích thước hoặc chọn ảnh khớp Watermark: " + ", ".join(mismatched[:8])
+                "Chọn khổ 2000×2000 px, hoặc tắt Kích thước và dùng ảnh đúng khổ. "
+                "Ảnh chưa khớp gồm " + ", ".join(mismatched[:8]) + "."
             )
 
 

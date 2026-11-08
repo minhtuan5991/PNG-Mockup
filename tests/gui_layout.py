@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import tkinter as tk
+from tkinter import ttk
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -37,6 +38,8 @@ def main() -> int:
                 app = PngMockupGui(root)
             app.show_page("tools")
             workspace = app.image_tools
+            size_choices = tuple(widget for widget in workspace.controls if isinstance(widget, ttk.Radiobutton))
+            assert {widget.cget("value") for widget in size_choices} == {"4500x5400", "4200x4800", "2000x2000"}
             workspace.images = {sample: inspect_tool_image(sample)}
             workspace.selected = {sample}
             workspace._selection_changed()
@@ -71,7 +74,8 @@ def main() -> int:
                         workspace._options_changed()
                         root.update()
                         root.update_idletasks()
-                        for button in (workspace.start_button, workspace.open_button, app.buttons["image_tools_choose"], *workspace.feature_checks.values()):
+                        visible_choices = size_choices if expanded else ()
+                        for button in (workspace.start_button, workspace.open_button, app.buttons["image_tools_choose"], *workspace.feature_checks.values(), *visible_choices):
                             assert button.winfo_ismapped(), (scale, geometry, preset, button)
                             assert button.winfo_width() >= button.winfo_reqwidth(), (scale, geometry, preset, button.cget("text"), "width", button.winfo_width(), button.winfo_reqwidth())
                             assert button.winfo_height() >= button.winfo_reqheight(), (scale, geometry, preset, button.cget("text"), "height")

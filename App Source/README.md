@@ -1,4 +1,4 @@
-# PNG Mockup 1.2.0
+# PNG Mockup 1.2.1
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -83,15 +83,16 @@ dùng phím mũi tên để di chuyển, Space để chọn/bỏ chọn, Ctrl+A 
 
 Bên dưới gallery có bốn checkbox; mỗi checkbox mở tùy chọn ngay tại trang:
 
-- **Kích thước**: chỉ PNG nền trong suốt, chọn 4500×5400 hoặc 4200×4800; giữ
-  Lanczos, căn giữa, cách mép trên 25 px và 300 DPI như trước.
+- **Kích thước** dùng cho PNG nền trong suốt. Khổ 2000×2000 đặt nội dung sát
+  mép trên. Hai khổ 4500×5400 và 4200×4800 cách mép trên 25 px. Cả ba khổ giữ
+  tỷ lệ ảnh, căn giữa theo chiều ngang, dùng Lanczos và xuất ở 300 DPI.
 - **Nén PNG**: một chế độ palette tự động cho POD với cổng kiểm tra chất lượng.
   Giữ kích thước, ICC và DPI khi không bật xóa metadata.
 - **Metadata**: xóa Comment, EXIF, XMP, thumbnail EXIF, IPTC và ICC; giữ pixel và DPI.
   Hỗ trợ PNG, JPG/JPEG và WebP.
 - **Watermark**: giữ yêu cầu PNG trong suốt 2000×2000 px / 72 DPI, chỉ gắn vào ảnh
-  cùng kích thước. Khi bật, Metadata được bật bắt buộc như trước. Khổ resize lớn
-  không tương thích watermark 2000×2000; app báo rõ trước khi xử lý.
+  cùng kích thước. Khi bật, Metadata được bật bắt buộc như trước. Có thể kết hợp
+  với tùy chọn Kích thước 2000×2000.
 
 Sau khi bấm **Bắt đầu xử lý**, app xử lý tuần tự và tạo thư mục mới có tên
 `PNG Mockup - Đã xử lý YYYY-MM-DD HH-MM-SS` cạnh tệp đầu tiên được chọn. Mỗi ảnh

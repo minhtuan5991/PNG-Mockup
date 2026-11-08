@@ -28,6 +28,34 @@ def create_art(path: Path, size=(160, 180), *, compressed=True) -> None:
 
 
 class ImageToolsTests(unittest.TestCase):
+    def test_square_resize_fits_visible_art_without_a_top_margin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cases = {
+                "square": ((144, 144), (0, 0, 2000, 2000)),
+                "landscape": ((144, 80), (0, 0, 2000, 1111)),
+                "portrait": ((80, 144), (444, 0, 1555, 2000)),
+            }
+            sources = []
+            for name, ((width, height), _) in cases.items():
+                path = root / f"{name}.png"
+                with Image.new("RGBA", (224, 192)) as image:
+                    ImageDraw.Draw(image).rectangle(
+                        (32, 20, 31 + width, 19 + height), fill=(40, 110, 200, 255)
+                    )
+                    image.putpixel((2, 5), (40, 110, 200, 1))
+                    image.save(path, dpi=(72, 72))
+                sources.append(path)
+
+            result = tools.run_tool_batch(sources, tools.ToolOptions(layout="2000x2000"))
+            self.assertFalse(result.failures)
+            self.assertEqual([item.source for item in result.outputs], sources)
+            for item in result.outputs:
+                with Image.open(item.output) as image, image.getchannel("A") as alpha:
+                    self.assertEqual(image.size, (2000, 2000))
+                    self.assertEqual(alpha.getbbox(), cases[item.source.stem][1])
+                    self.assertAlmostEqual(image.info["dpi"][0], 300, delta=0.02)
+
     def test_combined_resize_compression_metadata_matches_existing_processors(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

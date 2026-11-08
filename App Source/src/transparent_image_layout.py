@@ -18,6 +18,7 @@ RESIZE_PNG_COMPRESS_LEVEL = 3
 LAYOUT_SPECS = {
     "4500x5400": (4500, 5400, 4450, 5350),
     "4200x4800": (4200, 4800, 4150, 4750),
+    "2000x2000": (2000, 2000, 2000, 2000),
 }
 
 
@@ -187,29 +188,38 @@ def save_rgba_layout(
         if extrema == (0, 0):
             raise RuntimeError("Ảnh PNG hoàn toàn trong suốt.")
 
-        fitted = ImageOps.contain(
-            source,
-            (base_size, base_size),
-            Image.Resampling.LANCZOS,
-        )
-        base_canvas = Image.new("RGBA", (base_size, base_size), (0, 0, 0, 0))
-        base_canvas.alpha_composite(
-            fitted,
-            ((base_size - fitted.width) // 2, (base_size - fitted.height) // 2),
-        )
-        canvas = base_canvas
+        edge_aligned = output_layout == "2000x2000"
+        layout_source = source
+        if not edge_aligned:
+            fitted = ImageOps.contain(
+                source,
+                (base_size, base_size),
+                Image.Resampling.LANCZOS,
+            )
+            base_canvas = Image.new("RGBA", (base_size, base_size), (0, 0, 0, 0))
+            base_canvas.alpha_composite(
+                fitted,
+                ((base_size - fitted.width) // 2, (base_size - fitted.height) // 2),
+            )
+            layout_source = base_canvas
+            canvas = base_canvas
 
         if output_layout in LAYOUT_SPECS:
             target_width, target_height, max_width, max_height = LAYOUT_SPECS[
                 output_layout
             ]
-            base_alpha = base_canvas.getchannel("A")
-            pixel_bounds = base_alpha.getbbox()
-            base_alpha.close()
+            layout_alpha = layout_source.getchannel("A")
+            if edge_aligned:
+                # Fit visible source pixels before resampling can add an alpha fringe.
+                visible_alpha = layout_alpha.point(lambda value: 0 if value < 2 else value)
+                layout_alpha.close()
+                layout_alpha = visible_alpha
+            pixel_bounds = layout_alpha.getbbox()
+            layout_alpha.close()
             if pixel_bounds is None:
                 raise RuntimeError("Ảnh không còn điểm ảnh hiển thị sau khi resize.")
 
-            cropped = base_canvas.crop(pixel_bounds)
+            cropped = layout_source.crop(pixel_bounds)
             layout_fitted = ImageOps.contain(
                 cropped,
                 (max_width, max_height),
@@ -224,6 +234,7 @@ def save_rgba_layout(
                 raise RuntimeError("Ảnh không còn điểm ảnh hiển thị trong canvas đã chọn.")
 
             visible_width = fitted_bounds[2] - fitted_bounds[0]
+            top_margin = 0 if edge_aligned else 25
             canvas = Image.new(
                 "RGBA", (target_width, target_height), (0, 0, 0, 0)
             )
@@ -231,7 +242,7 @@ def save_rgba_layout(
                 layout_fitted,
                 (
                     (target_width - visible_width) // 2 - fitted_bounds[0],
-                    25 - fitted_bounds[1],
+                    top_margin - fitted_bounds[1],
                 ),
             )
 
