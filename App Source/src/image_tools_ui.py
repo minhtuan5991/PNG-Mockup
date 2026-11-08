@@ -8,10 +8,10 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageOps, ImageTk
 
 from image_tools import (
-    ToolImage, ToolOptions, inspect_tool_image, run_tool_batch, validate_tool_inputs,
+    TOOL_IMAGE_FORMATS, ToolImage, ToolOptions, inspect_tool_image, run_tool_batch, validate_tool_inputs,
 )
 from output_watermark import inspect_watermark
 from transparent_image_layout import LAYOUT_SPECS, SMALL_IMAGE_LONG_EDGE_PX
@@ -89,7 +89,7 @@ class ImageToolsWorkspace(ttk.Frame):
         title.pack(side="left", fill="x", expand=True)
         title.bind("<Configure>", lambda e: title.configure(wraplength=max(160, e.width)))
         self.controls.append(choose)
-        self._label(source.body, "Thêm trực tiếp PNG, JPG, JPEG hoặc WebP. Có thể chọn tệp từ nhiều thư mục.")
+        self._label(source.body, "Thêm PNG, JPG/JPEG, WebP, BMP, TIFF, GIF, AVIF và các ảnh app đọc được. Có thể chọn tệp từ nhiều thư mục.")
         toolbar = ttk.Frame(source.body, style="Section.TFrame")
         toolbar.pack(fill="x", pady=(12, 8))
         toolbar.columnconfigure(1, weight=1)
@@ -169,8 +169,10 @@ class ImageToolsWorkspace(ttk.Frame):
         sizes.bind("<Configure>", fit_sizes)
         self._label(
             resize,
-            "PNG nền trong suốt · Căn giữa theo chiều ngang · Lanczos · 300 DPI.\n"
-            "Khổ 2000 × 2000 px sát mép trên. Hai khổ dọc cách mép trên 25 px.",
+            "2000 × 2000 px nhận cả ảnh có nền và trong suốt, xuất PNG sát mép trên. "
+            "Ảnh động/nhiều trang dùng khung/trang đầu.\n"
+            "Hai khổ dọc dùng PNG trong suốt, cách mép trên 25 px. "
+            "Căn giữa theo chiều ngang · Lanczos · 300 DPI.",
         )
         self._label(self.option_panels["compress"], "Một chế độ nén tự động cho POD: giữ kích thước, ICC và DPI; kiểm tra chất lượng màu/alpha trước khi lưu. Mục tiêu giảm ≥35%; ảnh đã tối ưu có thể giảm ít hơn.")
         self._label(self.option_panels["metadata"], "Xóa Comment, EXIF, XMP, thumbnail EXIF, IPTC và ICC. Giữ nguyên pixel và DPI; không mã hóa lại ảnh. Khi bật Watermark, Metadata luôn được bật như trước.")
@@ -195,7 +197,7 @@ class ImageToolsWorkspace(ttk.Frame):
             return
         names = filedialog.askopenfilenames(
             parent=self.app.root, title="Chọn ảnh để xử lý",
-            filetypes=[("Ảnh hỗ trợ", "*.png *.jpg *.jpeg *.webp"), ("PNG", "*.png"), ("Tất cả tệp", "*.*")],
+            filetypes=[("Ảnh hỗ trợ", " ".join("*" + extension for extension in sorted(TOOL_IMAGE_FORMATS))), ("PNG", "*.png"), ("Tất cả tệp", "*.*")],
         )
         if names:
             self.add_files([Path(name) for name in names])
@@ -499,6 +501,7 @@ class ImageToolsWorkspace(ttk.Frame):
             data = None
             try:
                 with Image.open(path) as source:
+                    ImageOps.exif_transpose(source, in_place=True)
                     source.thumbnail(self._thumbnail_size, Image.Resampling.LANCZOS)
                     with source.convert("RGBA") as image:
                         data = (image.width, image.height, image.tobytes())

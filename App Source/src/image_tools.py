@@ -15,12 +15,20 @@ from png_optimizer import PngProcessingResult, process_png_file
 from transparent_image_layout import LAYOUT_SPECS, OUTPUT_DPI, next_available_output_path
 
 
+TOOL_IMAGE_FORMATS = {
+    extension: image_format
+    for extension, image_format in Image.registered_extensions().items()
+    if image_format in Image.OPEN or image_format == "MPO"
+}
+
+
 @dataclass(frozen=True)
 class ToolImage:
     path: Path
     width: int
     height: int
     size_bytes: int
+    frames: int = 1
 
 
 @dataclass(frozen=True)
@@ -56,18 +64,17 @@ class ToolBatchResult:
 def inspect_tool_image(path: Path) -> ToolImage:
     """Read only the header for the gallery; processors validate full pixels."""
     source = path.resolve()
-    if source.suffix.casefold() not in SUPPORTED_METADATA_IMAGE_EXTS:
-        raise ValueError(f"Chỉ hỗ trợ PNG, JPG, JPEG và WebP: {source.name}")
+    expected_format = TOOL_IMAGE_FORMATS.get(source.suffix.casefold())
+    if expected_format is None:
+        raise ValueError(f"App chưa hỗ trợ đọc định dạng ảnh này: {source.name}")
     if not source.is_file():
         raise FileNotFoundError(f"Không tìm thấy tệp: {source}")
     with Image.open(source) as image:
-        expected = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG", ".webp": "WEBP"}
-        if image.format != expected[source.suffix.casefold()]:
+        if image.format != expected_format:
             raise ValueError(f"Phần mở rộng không khớp định dạng ảnh: {source.name}")
-        if int(getattr(image, "n_frames", 1)) != 1:
-            raise ValueError(f"Ảnh động không được hỗ trợ: {source.name}")
+        frames = int(getattr(image, "n_frames", 1))
         width, height = image.size
-    return ToolImage(source, width, height, source.stat().st_size)
+    return ToolImage(source, width, height, source.stat().st_size, frames)
 
 
 def validate_tool_inputs(images: Iterable[ToolImage], options: ToolOptions) -> None:
@@ -75,10 +82,19 @@ def validate_tool_inputs(images: Iterable[ToolImage], options: ToolOptions) -> N
     selected = list(images)
     if not selected:
         raise ValueError("Hãy chọn ít nhất một ảnh trong danh sách.")
-    if options.layout or options.compress:
-        non_png = [item.path.name for item in selected if item.path.suffix.casefold() != ".png"]
-        if non_png:
-            raise ValueError("Kích thước và Nén PNG chỉ hỗ trợ PNG. Bỏ chọn các tệp: " + ", ".join(non_png[:8]))
+    if options.layout != "2000x2000":
+        if options.layout or options.compress:
+            non_png = [item.path.name for item in selected if item.path.suffix.casefold() != ".png"]
+            if non_png:
+                raise ValueError(
+                    "Tác vụ này chỉ hỗ trợ PNG. Chọn khổ 2000×2000 để xử lý các định dạng khác. "
+                    "Ảnh gồm " + ", ".join(non_png[:8])
+                )
+        for item in selected:
+            if item.frames != 1:
+                raise ValueError(f"Chọn khổ 2000×2000 để xử lý khung hoặc trang đầu tiên: {item.path.name}")
+            if item.path.suffix.casefold() not in SUPPORTED_METADATA_IMAGE_EXTS:
+                raise ValueError(f"Chọn khổ 2000×2000 để chuyển ảnh sang PNG trước khi xử lý: {item.path.name}")
     if options.watermark:
         size = LAYOUT_SPECS[options.layout][:2] if options.layout else None
         mismatched = [item.path.name for item in selected if (size or (item.width, item.height)) != WATERMARK_SIZE]
@@ -116,8 +132,9 @@ def process_tool_image(source: Path, destination: Path, options: ToolOptions) ->
     destination = destination.resolve()
     if source == destination or destination.exists():
         raise FileExistsError(f"File kết quả đã tồn tại: {destination}")
-    if source.suffix.casefold() != destination.suffix.casefold():
-        raise ValueError("File kết quả phải giữ nguyên phần mở rộng.")
+    output_suffix = ".png" if options.layout == "2000x2000" else source.suffix
+    if destination.suffix.casefold() != output_suffix.casefold():
+        raise ValueError(f"File kết quả cần có phần mở rộng {output_suffix}.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     compression: PngProcessingResult | None = None
     with tempfile.TemporaryDirectory(prefix=".png-mockup-processing-", dir=destination.parent) as temporary:
@@ -126,7 +143,7 @@ def process_tool_image(source: Path, destination: Path, options: ToolOptions) ->
         # Preserve the fast combined resize/compression path when no overlay is
         # needed between the two operations.
         if options.layout or (options.compress and not options.watermark):
-            current = stage / ("resized" + source.suffix)
+            current = stage / ("resized" + output_suffix)
             result = process_png_file(
                 source, current, output_layout=options.layout,
                 compress=options.compress and not bool(options.watermark), dpi=OUTPUT_DPI,
@@ -134,15 +151,15 @@ def process_tool_image(source: Path, destination: Path, options: ToolOptions) ->
             if result.compressed:
                 compression = result
         if options.watermark:
-            watermarked = stage / ("watermarked" + source.suffix)
+            watermarked = stage / ("watermarked" + output_suffix)
             create_watermarked_clean_copy(current, watermarked, options.watermark)
             current = watermarked
         if options.compress and options.watermark:
-            compressed = stage / ("compressed" + source.suffix)
+            compressed = stage / ("compressed" + output_suffix)
             compression = process_png_file(current, compressed, output_layout=None, compress=True, dpi=OUTPUT_DPI)
             current = compressed
         if options.metadata and not options.watermark:
-            cleaned = stage / ("cleaned" + source.suffix)
+            cleaned = stage / ("cleaned" + output_suffix)
             clean_image_metadata_copy(current, cleaned)
             current = cleaned
         if current == source:
@@ -168,7 +185,8 @@ def run_tool_batch(
         if progress:
             progress(index - 1, len(images), f"Đang xử lý {index}/{len(images)}: {image.path.name}")
         try:
-            destination = next_available_output_path(output_dir, image.path.name)
+            output_name = image.path.with_suffix(".png").name if options.layout == "2000x2000" else image.path.name
+            destination = next_available_output_path(output_dir, output_name)
             outputs.append(process_tool_image(image.path, destination, options))
             status = f"Đã xong {index}/{len(images)}: {image.path.name}"
         except Exception as exc:

@@ -28,6 +28,89 @@ def create_art(path: Path, size=(160, 180), *, compressed=True) -> None:
 
 
 class ImageToolsTests(unittest.TestCase):
+    def test_square_accepts_opaque_image_formats_and_reserves_unique_png_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sources = []
+            for extension in ("png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff", "gif", "avif"):
+                path = root / f"Ảnh có nền.{extension}"
+                with Image.new("RGB", (100, 60), (40, 120, 200)) as image:
+                    image.save(path)
+                sources.append(path)
+            original_bytes = {path: path.read_bytes() for path in sources}
+            result = tools.run_tool_batch(sources, tools.ToolOptions(layout="2000x2000"))
+            self.assertFalse(result.failures)
+            self.assertEqual(len(result.outputs), len(sources))
+            self.assertEqual(
+                [item.output.name for item in result.outputs],
+                ["Ảnh có nền.png"] + [f"Ảnh có nền__{index}.png" for index in range(2, len(sources) + 1)],
+            )
+            for item in result.outputs:
+                self.assertEqual(item.source.read_bytes(), original_bytes[item.source])
+                with Image.open(item.output) as image:
+                    self.assertEqual(image.format, "PNG")
+                    self.assertEqual(image.size, (2000, 2000))
+                    self.assertEqual(image.getchannel("A").getbbox(), (0, 0, 2000, 1200))
+                    self.assertAlmostEqual(image.info["dpi"][0], 300, delta=0.02)
+
+    def test_square_uses_first_frame_or_page_and_applies_exif_orientation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            gif = root / "animated.gif"
+            tiff = root / "pages.tiff"
+            jpeg = root / "rotated.jpg"
+            first = Image.new("RGB", (100, 60), (255, 0, 0))
+            second = Image.new("RGB", (100, 60), (0, 0, 255))
+            try:
+                first.save(gif, save_all=True, append_images=[second], duration=100, loop=0)
+                first.save(tiff, save_all=True, append_images=[second])
+                exif = Image.Exif()
+                exif[274] = 6
+                first.save(jpeg, exif=exif)
+            finally:
+                first.close()
+                second.close()
+            for source in (gif, tiff):
+                with self.assertRaisesRegex(ValueError, "khung hoặc trang đầu"):
+                    tools.run_tool_batch([source], tools.ToolOptions(metadata=True))
+            result = tools.run_tool_batch([gif, tiff, jpeg], tools.ToolOptions(layout="2000x2000"))
+            self.assertFalse(result.failures)
+            for item in result.outputs:
+                with Image.open(item.output) as image:
+                    red, green, blue = image.getpixel((1000, 500))[:3]
+                    self.assertGreaterEqual(red, 250)
+                    self.assertLessEqual(max(green, blue), 4)
+                    expected = (400, 0, 1600, 2000) if item.source == jpeg else (0, 0, 2000, 1200)
+                    self.assertEqual(image.getchannel("A").getbbox(), expected)
+                    self.assertNotIn("exif", image.info)
+
+    def test_square_jpeg_resize_can_combine_watermark_compression_and_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, mark = root / "photo.jpg", root / "mark.png"
+            with Image.new("RGB", (100, 60), (40, 120, 200)) as image:
+                image.save(source)
+            with Image.new("RGBA", (2000, 2000)) as image:
+                ImageDraw.Draw(image).rectangle((20, 1800, 100, 1900), fill=(0, 255, 0, 255))
+                image.save(mark, dpi=(72, 72))
+            original = source.read_bytes()
+            options = tools.ToolOptions(layout="2000x2000", compress=True, metadata=True, watermark=mark)
+            result = tools.run_tool_batch([source], options)
+            self.assertFalse(result.failures)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertTrue(result.outputs[0].compression.compressed)
+            self.assertEqual(result.outputs[0].output.name, "photo.png")
+            with Image.open(result.outputs[0].output) as image:
+                rgba = image.convert("RGBA")
+                try:
+                    self.assertEqual(rgba.size, (2000, 2000))
+                    self.assertEqual(rgba.getpixel((50, 1850)), (0, 255, 0, 255))
+                    self.assertEqual(rgba.getpixel((1000, 0))[3], 255)
+                finally:
+                    rgba.close()
+                self.assertNotIn("icc_profile", image.info)
+                self.assertAlmostEqual(image.info["dpi"][0], 300, delta=0.02)
+
     def test_square_resize_fits_visible_art_without_a_top_margin(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

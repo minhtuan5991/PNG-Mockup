@@ -1,4 +1,4 @@
-# PNG Mockup 1.2.1
+# PNG Mockup 1.2.2
 
 Tiện ích **Nén ảnh PNG** dùng một luồng tự động duy nhất cho POD. Từ 1.1.5,
 luồng chính chuyển ảnh 8-bit phù hợp sang palette tối đa 256 màu có alpha rồi
@@ -83,9 +83,11 @@ dùng phím mũi tên để di chuyển, Space để chọn/bỏ chọn, Ctrl+A 
 
 Bên dưới gallery có bốn checkbox; mỗi checkbox mở tùy chọn ngay tại trang:
 
-- **Kích thước** dùng cho PNG nền trong suốt. Khổ 2000×2000 đặt nội dung sát
-  mép trên. Hai khổ 4500×5400 và 4200×4800 cách mép trên 25 px. Cả ba khổ giữ
-  tỷ lệ ảnh, căn giữa theo chiều ngang, dùng Lanczos và xuất ở 300 DPI.
+- **Kích thước** nhận PNG, JPG/JPEG, WebP, BMP, TIFF, GIF, AVIF và các định dạng
+  bộ đọc của app hỗ trợ ở khổ 2000×2000. Ảnh có nền hoặc trong suốt đều được
+  xuất thành PNG, đặt nội dung sát mép trên. Ảnh động/nhiều trang dùng khung/trang
+  đầu. Hai khổ 4500×5400 và 4200×4800 dùng PNG trong suốt, cách mép trên 25 px.
+  Cả ba khổ giữ tỷ lệ ảnh, căn giữa theo chiều ngang, dùng Lanczos và xuất ở 300 DPI.
 - **Nén PNG**: một chế độ palette tự động cho POD với cổng kiểm tra chất lượng.
   Giữ kích thước, ICC và DPI khi không bật xóa metadata.
 - **Metadata**: xóa Comment, EXIF, XMP, thumbnail EXIF, IPTC và ICC; giữ pixel và DPI.
@@ -96,8 +98,9 @@ Bên dưới gallery có bốn checkbox; mỗi checkbox mở tùy chọn ngay t�
 
 Sau khi bấm **Bắt đầu xử lý**, app xử lý tuần tự và tạo thư mục mới có tên
 `PNG Mockup - Đã xử lý YYYY-MM-DD HH-MM-SS` cạnh tệp đầu tiên được chọn. Mỗi ảnh
-chỉ có một bản kết quả sau toàn bộ tác vụ; giữ phần mở rộng và tên gốc, thêm số
-nếu các thư mục nguồn có tên tệp trùng nhau. Các lượt chạy không ghi đè nhau.
+chỉ có một bản kết quả sau toàn bộ tác vụ. Khổ 2000×2000 dùng phần mở rộng
+`.png`; các tác vụ khác giữ phần mở rộng. Tên kết quả thêm số nếu bị trùng.
+Các lượt chạy không ghi đè nhau.
 Bấm **Mở thư mục kết quả** để xem ảnh. Ảnh nguồn luôn được giữ nguyên.
 
 Chế độ nén tự dùng palette thích ứng có cổng kiểm tra chất lượng, không có thanh

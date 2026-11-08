@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import io
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageCms, ImageOps
 
 
 SMALL_IMAGE_LONG_EDGE_PX = 2500
@@ -98,7 +99,8 @@ def resize_transparent_png(
     dpi: int = OUTPUT_DPI,
 ) -> Path:
     source_path = source_path.resolve()
-    if source_path.suffix.casefold() != ".png":
+    square_layout = output_layout == "2000x2000"
+    if not square_layout and source_path.suffix.casefold() != ".png":
         raise ValueError(f"Chỉ hỗ trợ file PNG: {source_path.name}")
     if not source_path.is_file():
         raise FileNotFoundError(f"Không tìm thấy file: {source_path}")
@@ -107,12 +109,27 @@ def resize_transparent_png(
 
     try:
         with Image.open(source_path) as source:
-            if str(source.format or "").casefold() != "png":
+            if not square_layout and str(source.format or "").casefold() != "png":
                 raise ValueError(f"File không phải PNG hợp lệ: {source_path.name}")
-            rgba = source.convert("RGBA")
+            if square_layout:
+                ImageOps.exif_transpose(source, in_place=True)
             icc_profile = source.info.get("icc_profile")
-    except (OSError, ValueError) as exc:
-        raise ValueError(f"Không đọc được PNG {source_path.name}: {exc}") from exc
+            if square_layout and source.mode in {"CMYK", "LAB"} and (icc_profile or source.mode == "LAB"):
+                source_profile = (
+                    ImageCms.ImageCmsProfile(io.BytesIO(icc_profile))
+                    if icc_profile else ImageCms.createProfile("LAB")
+                )
+                target_profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+                converted = ImageCms.profileToProfile(source, source_profile, target_profile, outputMode="RGB")
+                try:
+                    rgba = converted.convert("RGBA")
+                finally:
+                    converted.close()
+                icc_profile = target_profile.tobytes()
+            else:
+                rgba = source.convert("RGBA")
+    except (OSError, ValueError, ImageCms.PyCMSError) as exc:
+        raise ValueError(f"Không đọc được ảnh {source_path.name}: {exc}") from exc
 
     alpha = rgba.getchannel("A")
     try:
@@ -124,7 +141,7 @@ def resize_transparent_png(
             clean_alpha.close()
     finally:
         alpha.close()
-    if extrema == (255, 255):
+    if not square_layout and extrema == (255, 255):
         rgba.close()
         raise ValueError(f"PNG không có nền trong suốt: {source_path.name}")
     if extrema == (0, 0) or bounds is None:
@@ -183,7 +200,7 @@ def save_rgba_layout(
         alpha = source.getchannel("A")
         extrema = alpha.getextrema()
         alpha.close()
-        if extrema == (255, 255):
+        if output_layout != "2000x2000" and extrema == (255, 255):
             raise RuntimeError("Ảnh PNG không có nền trong suốt.")
         if extrema == (0, 0):
             raise RuntimeError("Ảnh PNG hoàn toàn trong suốt.")
